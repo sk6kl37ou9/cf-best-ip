@@ -15,6 +15,7 @@ echo "CloudflareSpeedTest 版本: ${VER}"
 # 2. 下载并解压（linux_amd64，v2.3+ 资产名已改为小写 cfst_*）
 curl -fsSL -o cfst.tar.gz "${BASE_URL}/${VER}/cfst_linux_amd64.tar.gz"
 tar -xzf cfst.tar.gz
+chmod +x cfst_linux_amd64/cfst
 
 # 3. 拉取 Cloudflare 官方 IPv4 段作为测速池
 curl -fsSL https://www.cloudflare.com/ips-v4 -o ip.txt
