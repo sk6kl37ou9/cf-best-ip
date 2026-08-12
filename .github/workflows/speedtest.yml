@@ -6,34 +6,19 @@ on:
   workflow_dispatch: {}      # 手动触发
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: set-matrix
-        run: |
-          MATRIX=$(cat data/targets.json | jq -c '{colo: .targets}')
-          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
-
   speedtest:
-    needs: setup
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: 按 colo 测速
-        run: bash scripts/speedtest.sh ${{ matrix.colo }}
+      - name: 全量测速
+        run: bash scripts/speedtest.sh
 
       - name: 解析结果
-        run: node scripts/parse.js ${{ matrix.colo }}
+        run: node scripts/parse.js
 
       - name: 上传到 KV
-        run: node scripts/upload.mjs ${{ matrix.colo }}
+        run: node scripts/upload.mjs
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
@@ -43,6 +28,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: result-${{ matrix.colo }}
-          path: result_${{ matrix.colo }}.csv
+          name: result
+          path: result.csv
           if-no-files-found: ignore

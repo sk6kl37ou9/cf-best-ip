@@ -35,7 +35,8 @@ const FALLBACK = {
 };
 
 export async function getBest(country, env) {
-  const chain = [country, ...(FALLBACK[country] || []), ...FALLBACK.DEFAULT];
+  // 优先查访客国家的数据，缺失时按就近回退链，最终兜底到全局候选池 GLOBAL
+  const chain = [country, ...(FALLBACK[country] || []), ...FALLBACK.DEFAULT, 'GLOBAL'];
   const seen = new Set();
   for (const c of chain) {
     if (seen.has(c)) continue;

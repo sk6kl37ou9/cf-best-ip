@@ -1,17 +1,6 @@
-// 上传 bestip_{COUNTRY}.json 到 Cloudflare KV（通过 REST API）
+// 上传 bestip_GLOBAL.json 到 Cloudflare KV（通过 REST API）
 import fs from 'node:fs';
 import path from 'node:path';
-
-const colo = process.argv[2];
-if (!colo) {
-  console.error('用法: node scripts/upload.mjs <COLO>');
-  process.exit(1);
-}
-
-const coloMap = JSON.parse(
-  fs.readFileSync(new URL('../data/colo-map.json', import.meta.url), 'utf8')
-);
-const info = coloMap[colo] || { country: colo };
 
 const { CF_ACCOUNT_ID, CF_API_TOKEN, KV_NAMESPACE_ID } = process.env;
 if (!CF_ACCOUNT_ID || !CF_API_TOKEN || !KV_NAMESPACE_ID) {
@@ -19,14 +8,14 @@ if (!CF_ACCOUNT_ID || !CF_API_TOKEN || !KV_NAMESPACE_ID) {
   process.exit(1);
 }
 
-const file = path.join(process.cwd(), `bestip_${info.country}.json`);
+const file = path.join(process.cwd(), 'bestip_GLOBAL.json');
 if (!fs.existsSync(file)) {
-  console.log(`无数据文件 ${file}，跳过上传`);
+  console.log('无数据文件，跳过上传');
   process.exit(0);
 }
 const value = fs.readFileSync(file, 'utf8');
 
-const key = `bestip:${info.country}`;
+const key = 'bestip:GLOBAL';
 const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${KV_NAMESPACE_ID}/values/${encodeURIComponent(key)}`;
 
 const res = await fetch(url, {

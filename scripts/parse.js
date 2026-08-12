@@ -1,21 +1,10 @@
-// 解析 CloudflareST 输出的 result_{COLO}.csv -> bestip_{COUNTRY}.json
+// 解析 result.csv -> bestip_GLOBAL.json（全局优选 IP 候选池）
 const fs = require('fs');
 const path = require('path');
 
-const colo = process.argv[2];
-if (!colo) {
-  console.error('用法: node scripts/parse.js <COLO>');
-  process.exit(1);
-}
-
-const coloMap = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', 'data', 'colo-map.json'), 'utf8')
-);
-const info = coloMap[colo] || { country: colo, name: colo };
-
-const csvFile = path.join(process.cwd(), `result_${colo}.csv`);
+const csvFile = path.join(process.cwd(), 'result.csv');
 if (!fs.existsSync(csvFile)) {
-  console.log(`跳过: 无结果文件 ${csvFile}`);
+  console.log('跳过: 无结果文件 result.csv');
   process.exit(0);
 }
 
@@ -29,27 +18,25 @@ for (const line of lines) {
   if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) continue;
   ips.push({
     ip,
-    delay: cols[4] ? parseFloat(cols[4]) : 0,   // 平均延迟 ms
+    delay: cols[4] ? parseFloat(cols[4]) : 0,   // 平均延迟 ms（测速机视角）
     loss: cols[3] ? parseFloat(cols[3]) : 0,    // 丢包率 0~1
     speed: cols[5] ? parseFloat(cols[5]) : 0,   // 下载速度 MB/s
-    colo,
   });
 }
 
 if (ips.length === 0) {
-  console.log(`跳过: 无有效 IP 数据 ${csvFile}`);
+  console.log('跳过: 无有效 IP 数据');
   process.exit(0);
 }
 
 const out = {
-  country: info.country,
-  countryName: info.name,
-  colo,
+  country: 'GLOBAL',
+  countryName: '全球候选池（浏览器实测后按你的网络重排）',
   updatedAt: new Date().toISOString(),
   ips,
   domains: [],
 };
 
-const outFile = path.join(process.cwd(), `bestip_${info.country}.json`);
+const outFile = path.join(process.cwd(), 'bestip_GLOBAL.json');
 fs.writeFileSync(outFile, JSON.stringify(out, null, 2));
 console.log(`写入 ${outFile}，共 ${ips.length} 条 IP`);
