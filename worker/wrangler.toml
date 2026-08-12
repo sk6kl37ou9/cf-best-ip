@@ -1,0 +1,12 @@
+name = "cf-best-ip"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+# 替换为你的 KV Namespace ID（Cloudflare 控制台 → Workers & Pages → KV 查看）
+[[kv_namespaces]]
+binding = "BESTIP"
+id = "c70128782af344e9a8392c5d5139a636"
+
+# 替换为 Pages 站点地址（用于根路径跳转）
+[vars]
+PAGES_URL = "https://cf-best-ip-33x.pages.dev"

@@ -1,0 +1,20 @@
+# WorkBuddy 本地数据
+.workbuddy/
+
+# Wrangler 缓存
+worker/.wrangler/
+.wrangler/
+
+# Node
+node_modules/
+
+# 日志
+*.log
+
+# 测速临时产物（GitHub Actions 运行时生成）
+result_*.csv
+bestip_*.json
+ip.txt
+ipv6.txt
+CloudflareST
+cfst.tar.gz

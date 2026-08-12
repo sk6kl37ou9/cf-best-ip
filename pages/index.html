@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CF 优选 IP</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>CF 优选 IP</h1>
+    <div id="me" class="me">识别中…</div>
+  </header>
+
+  <main>
+    <section id="panel">
+      <div class="panel-head">
+        <h2>全球节点</h2>
+        <div class="actions">
+          <button id="selectAll">全选</button>
+          <button id="clearAll">清空</button>
+        </div>
+      </div>
+      <div id="countries" class="grid"></div>
+    </section>
+
+    <section id="detail" class="detail">
+      <h2>优选 IP 列表</h2>
+      <p class="hint">点击左侧国家卡片查看该国优选 IP，你的所在国家会自动高亮并加载</p>
+      <div id="ipList"></div>
+    </section>
+
+    <section id="subscribe" class="subscribe">
+      <h2>订阅生成</h2>
+      <p class="hint">勾选国家 → 填写节点模板 → 生成订阅链接，导入客户端即可</p>
+      <div class="form">
+        <label>协议
+          <select id="type">
+            <option value="vless">vless</option>
+            <option value="trojan">trojan</option>
+            <option value="list">纯 IP 列表</option>
+          </select>
+        </label>
+        <label>UUID / 密码
+          <input id="uuid" placeholder="vless 填 UUID，trojan 填密码">
+        </label>
+        <label>端口
+          <input id="port" value="443">
+        </label>
+        <label>SNI / TLS 域名
+          <input id="sni" placeholder="your.domain.com">
+        </label>
+        <label>传输
+          <select id="network">
+            <option value="ws">ws</option>
+            <option value="grpc">grpc</option>
+            <option value="tcp">tcp</option>
+          </select>
+        </label>
+        <label>路径
+          <input id="path" placeholder="/">
+        </label>
+        <button id="genSub">生成订阅</button>
+      </div>
+      <div id="subResult" class="sub-result"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
