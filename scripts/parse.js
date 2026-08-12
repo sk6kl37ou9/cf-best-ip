@@ -33,7 +33,7 @@ const out = {
   country: 'GLOBAL',
   countryName: '全球候选池（浏览器实测后按你的网络重排）',
   updatedAt: new Date().toISOString(),
-  ips,
+  ips: ips.slice(0, 20), // -dd 会输出全部延迟达标 IP，只取最快的 20 个作为候选池
   domains: [],
 };
 

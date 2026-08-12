@@ -12,13 +12,13 @@ chmod +x cfst_linux_amd64/cfst
 # 2. 拉取 Cloudflare 官方 IPv4 段作为测速池
 curl -fsSL https://www.cloudflare.com/ips-v4 -o ip.txt
 
-# 3. 全量测速：TCPing 延迟 + 下载测速，产出 top 15
-# 注意：测速机在美国，本地延迟本就 <40ms，不能用 -tll 假墙过滤（那是给国内网络用的）
+# 3. 全量测速：只做 TCPing 延迟测速（-dd 禁用下载测速，避免 IP 直连下载被限速）
+# 结果按延迟排序，候选池交给前端浏览器实测重排
 ./cfst_linux_amd64/cfst \
   -f ip.txt \
-  -url "https://speed.cloudflare.com/__down?bytes=200000000" \
-  -n 200 -t 4 -dn 15 -dt 10 \
-  -tl 200 -sl 1 \
+  -n 200 -t 4 \
+  -tl 200 \
+  -dd \
   -p 0 -o "result.csv"
 
 echo "=== 测速完成 ==="
