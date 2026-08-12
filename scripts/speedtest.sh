@@ -12,15 +12,15 @@ VER="$(curl -fsSL https://api.github.com/repos/XIU2/CloudflareSpeedTest/releases
   | grep -oP '"tag_name":\s*"\K[^"]+' | head -n1)"
 echo "CloudflareSpeedTest 版本: ${VER}"
 
-# 2. 下载并解压（linux_amd64）
-curl -fsSL -o cfst.tar.gz "${BASE_URL}/${VER}/CloudflareST_linux_amd64.tar.gz"
+# 2. 下载并解压（linux_amd64，v2.3+ 资产名已改为小写 cfst_*）
+curl -fsSL -o cfst.tar.gz "${BASE_URL}/${VER}/cfst_linux_amd64.tar.gz"
 tar -xzf cfst.tar.gz
 
 # 3. 拉取 Cloudflare 官方 IPv4 段作为测速池
 curl -fsSL https://www.cloudflare.com/ips-v4 -o ip.txt
 
-# 4. 按 colo 测速（HTTPing 模式才支持 -cfcolo）
-./CloudflareST \
+# 4. 按 colo 测速（HTTPing 模式才支持 -cfcolo，二进制在解压出的子目录里）
+./cfst_linux_amd64/cfst \
   -f ip.txt \
   -cfcolo "${COLO}" \
   -httping \
