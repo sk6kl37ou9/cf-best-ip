@@ -3,17 +3,10 @@
 set -euo pipefail
 
 COLO="${1:-HKG}"
-BASE_URL="https://github.com/XIU2/CloudflareSpeedTest/releases/download"
-
 echo "=== 目标数据中心: ${COLO} ==="
 
-# 1. 获取最新版本号
-VER="$(curl -fsSL https://api.github.com/repos/XIU2/CloudflareSpeedTest/releases/latest \
-  | grep -oP '"tag_name":\s*"\K[^"]+' | head -n1)"
-echo "CloudflareSpeedTest 版本: ${VER}"
-
-# 2. 下载并解压（linux_amd64，v2.3+ 资产名已改为小写 cfst_*）
-curl -fsSL -o cfst.tar.gz "${BASE_URL}/${VER}/cfst_linux_amd64.tar.gz"
+# 1. 下载并解压（用 latest 重定向直链，避免 api.github.com 限流；v2.3+ 资产名为小写 cfst_*）
+curl -fsSL -o cfst.tar.gz "https://github.com/XIU2/CloudflareSpeedTest/releases/latest/download/cfst_linux_amd64.tar.gz"
 tar -xzf cfst.tar.gz
 chmod +x cfst_linux_amd64/cfst
 
