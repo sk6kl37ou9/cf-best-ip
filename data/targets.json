@@ -1,4 +1,0 @@
-{
-  "targets": ["HKG", "TPE", "NRT", "KIX", "ICN", "SIN", "LAX", "SJC", "SEA", "FRA", "LHR", "SYD"],
-  "note": "默认测速地区（colo 三字码），改这里即可增减；中国访客无本地 CF 节点，靠 HK/TW/JP/SG 周边回退"
-}
