@@ -46,7 +46,7 @@ async function loadMe() {
     const g = d.geo;
     const c = d.carrier || { code: 'AB', label: '境外' };
     $('#meGeo') && ($('#meGeo').textContent = g ? `${g.country || ''} ${g.region || ''} ${g.city || ''}`.trim() || '—' : '—');
-    $('#meCarrier') && ($('#meCarrier').innerHTML = `<span class="tag ${c.code === 'AB' ? '' : 'ok'}">${c.label}（${c.code}）</span>`);
+    $('#meCarrier') && ($('#meCarrier').textContent = `${c.label}（${c.code}）`);
     $('#meEdge') && ($('#meEdge').textContent = d.edge ? `${d.edge.country} · ${d.edge.colo}` : '—');
     $('#meIp') && ($('#meIp').textContent = d.ip || '—');
     $('#locText').textContent = `${d.ip} · ${c.label}`;
