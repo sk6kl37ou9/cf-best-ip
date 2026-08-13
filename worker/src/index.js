@@ -35,9 +35,10 @@ async function handle(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // 访客信息（用于前端高亮「你所在国家」）
+  // 访客信息（含访客真实 IP）
   if (path === '/api/me') {
     return json({
+      ip: request.headers.get('CF-Connecting-IP') || '',
       country: request.cf?.country,
       city: request.cf?.city,
       colo: request.cf?.colo,

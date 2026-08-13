@@ -15,17 +15,19 @@
   <main>
     <section>
       <div class="detail-head">
-        <h2>优选 IP · 浏览器实测排序</h2>
+        <h2>优选 IP · 勾选你要的节点</h2>
+        <button id="selectAll">全选</button>
+        <button id="clearAll">清空</button>
         <button id="reprobe">重新实测</button>
-        <button id="copyAll">复制全部</button>
+        <button id="copySel">复制已选</button>
       </div>
       <p id="hint" class="hint">正在加载候选池并实测…</p>
       <div id="ipList"></div>
     </section>
 
     <section>
-      <h2>订阅生成</h2>
-      <p class="hint">默认取实测最快的前 10 个 IP 生成订阅</p>
+      <h2>订阅生成（用你勾选的节点）</h2>
+      <p class="hint">勾选上面的节点后，用它们生成订阅；未勾选则不会生成</p>
       <div class="form">
         <label>协议
           <select id="type">
