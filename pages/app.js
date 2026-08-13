@@ -135,6 +135,51 @@ async function speedSelected() {
   $('#btnSpeed').disabled = false;
 }
 
+/* ---------- 绑定子域·浏览器实测（用 DNS token 自动建子域，证书有效不超时） ---------- */
+async function bindSpeedSelected() {
+  if (state.selected.size === 0) { alert('请先勾选要绑定测速的 IP'); return; }
+  const ips = [...state.selected];
+  if (!confirm(`将把 ${ips.length} 个 IP 绑定为 ${'*.goodip.cc.cd'} 子域用于浏览器实测（会创建对应 DNS 记录，灰云直连）。测完记得点「解绑清理」。继续？`)) return;
+  $('#btnBindSpeed').disabled = true;
+  $('#btnUnbind').disabled = false;
+  for (const ip of ips) {
+    const el = document.querySelector(`.ms[data-ms="${ip}"]`);
+    const host = ip.replace(/\./g, '-') + '.goodip.cc.cd';
+    if (el) { el.textContent = '绑定中…'; el.className = 'ms'; }
+    // 1) 建子域
+    try { await fetch(API + '/api/dns-bind', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ip, action: 'bind' }) }); } catch {}
+    // 2) 浏览器轮询实测（等 DNS 生效，最多 12s）
+    let ms = null;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 12000) {
+      const s = performance.now();
+      try {
+        await fetch(`https://${host}/cdn-cgi/trace`, { mode: 'no-cors', cache: 'no-store', redirect: 'manual' });
+        ms = Math.round(performance.now() - s);
+        break;
+      } catch {}
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    if (el) {
+      if (ms != null) { el.textContent = ms + ' ms(子域)'; el.className = 'ms ok'; }
+      else { el.textContent = '超时'; el.className = 'ms bad'; }
+    }
+  }
+  $('#btnBindSpeed').disabled = false;
+}
+async function unbindAll() {
+  const ips = [...state.selected];
+  if (ips.length === 0) { alert('请先勾选要解绑的 IP'); return; }
+  $('#btnUnbind').disabled = true;
+  for (const ip of ips) {
+    try { await fetch(API + '/api/dns-bind', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ip, action: 'unbind' }) }); } catch {}
+    const el = document.querySelector(`.ms[data-ms="${ip}"]`);
+    if (el) { el.textContent = '—'; el.className = 'ms'; }
+  }
+  $('#btnUnbind').disabled = false;
+  alert(`已解绑 ${ips.length} 个 IP 的子域 DNS 记录`);
+}
+
 /* ---------- 订阅生成 ---------- */
 async function genSub() {
   if (state.selected.size === 0) { alert('请先勾选要生成订阅的 IP'); return; }
@@ -142,13 +187,22 @@ async function genSub() {
   const uuid = $('#subUuid').value.trim();
   const sni = $('#subSni').value.trim() || 'www.visa.cn';
   const port = $('#subPort').value.trim() || '443';
-  const ips = [...state.selected].join(',');
-  const url = `/api/sub?type=${type}&ips=${encodeURIComponent(ips)}&sni=${encodeURIComponent(sni)}&port=${port}` + (uuid ? `&uuid=${encodeURIComponent(uuid)}` : '');
+  const useDomain = $('#subUseDomain').checked;
+  let url, label;
+  if (useDomain) {
+    const hosts = [...state.selected].map((ip) => ip.replace(/\./g, '-') + '.goodip.cc.cd').join(',');
+    url = `/api/sub?type=${type}&hosts=${encodeURIComponent(hosts)}&sni=${encodeURIComponent(sni)}&port=${port}` + (uuid ? `&uuid=${encodeURIComponent(uuid)}` : '');
+    label = `${state.selected.size} 个子域`;
+  } else {
+    const ips = [...state.selected].join(',');
+    url = `/api/sub?type=${type}&ips=${encodeURIComponent(ips)}&sni=${encodeURIComponent(sni)}&port=${port}` + (uuid ? `&uuid=${encodeURIComponent(uuid)}` : '');
+    label = `${state.selected.size} 个 IP`;
+  }
   try {
     const r = await fetch(API + url, { cache: 'no-store' });
     const text = await r.text();
     $('#subResult').value = (type === 'vless' || type === 'trojan') ? API + url : text;
-    $('#subInfo').textContent = `已生成 ${state.selected.size} 个节点 · ${type}`;
+    $('#subInfo').textContent = `已生成 ${label} · ${type}` + (useDomain ? ' · 子域版（证书有效·防超时）' : '');
   } catch (e) { $('#subInfo').textContent = '生成失败：' + e.message; }
 }
 async function copySub() {
@@ -175,6 +229,8 @@ async function genDns() {
 /* ---------- 事件绑定 ---------- */
 $('#btnProbeDomains').onclick = probeDomains;
 $('#btnSpeed').onclick = speedSelected;
+$('#btnBindSpeed').onclick = bindSpeedSelected;
+$('#btnUnbind').onclick = unbindAll;
 $('#btnSelectAll').onclick = () => { currentIps().forEach((x) => state.selected.add(x.ip)); renderIps(); };
 $('#btnClear').onclick = () => { state.selected.clear(); renderIps(); };
 $('#ipSearch').oninput = renderIps;

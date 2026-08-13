@@ -118,6 +118,49 @@ export default {
       });
     }
 
+    // DNS 自动绑定：把优选IP绑成子域（带证书，浏览器可真测；订阅可用子域替代裸IP）
+    // 依赖 Worker Secret CF_DNS_TOKEN（DNS:Edit 权限）+ goodip.cc.cd 所在 zone
+    if (path === '/api/dns-bind') {
+      const token = env.CF_DNS_TOKEN;
+      if (!token) return json({ error: 'CF_DNS_TOKEN 未配置（需在 Worker 注入带 DNS:Edit 的 token）' }, 503);
+      const ZONE = 'dd8fb7ebc446680464043093dbe47b4c';
+      const ROOT = 'goodip.cc.cd';
+      let body = {};
+      if (request.method === 'POST') { try { body = await request.json(); } catch {} }
+      const ip = (body.ip || url.searchParams.get('ip') || '').trim();
+      const action = (body.action || url.searchParams.get('action') || 'bind').trim();
+      if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return json({ error: 'ip 格式不正确' }, 400);
+      const sub = ip.replace(/\./g, '-');
+      const name = `${sub}.${ROOT}`;
+      const api = 'https://api.cloudflare.com/client/v4';
+      const h = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const listUrl = `${api}/zones/${ZONE}/dns_records?name=${encodeURIComponent(name)}&type=A`;
+      if (action === 'list') {
+        const j = await (await fetch(listUrl, { headers: h })).json();
+        return json({ records: j.result || [] });
+      }
+      if (action === 'unbind') {
+        const j = await (await fetch(listUrl, { headers: h })).json();
+        const rec = j.result && j.result[0];
+        if (!rec) return json({ ok: true, deleted: false });
+        const del = await fetch(`${api}/zones/${ZONE}/dns_records/${rec.id}`, { method: 'DELETE', headers: h });
+        return json({ ok: (await del.json()).success, deleted: true, host: name });
+      }
+      // bind：存在则更新，不存在则创建；灰云(DNS only)直连优选IP
+      const j = await (await fetch(listUrl, { headers: h })).json();
+      const rec = j.result && j.result[0];
+      const payload = { type: 'A', name, content: ip, ttl: 60, proxied: false };
+      let res;
+      if (rec) {
+        if (rec.content === ip) return json({ ok: true, exists: true, host: name, ip });
+        res = await fetch(`${api}/zones/${ZONE}/dns_records/${rec.id}`, { method: 'PUT', headers: h, body: JSON.stringify(payload) });
+      } else {
+        res = await fetch(`${api}/zones/${ZONE}/dns_records`, { method: 'POST', headers: h, body: JSON.stringify(payload) });
+      }
+      const rj = await res.json();
+      return json({ ok: rj.success, host: name, ip, errors: rj.errors || null });
+    }
+
     // 订阅生成（vless/trojan/clash/singbox + ECH + DoH）
     if (path === '/api/sub') {
       return withCors(makeSubscription(url.searchParams));

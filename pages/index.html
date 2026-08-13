@@ -48,12 +48,14 @@
           <input id="ipSearch" class="input" placeholder="过滤国家/地区，如 HK JP" />
           <button class="btn ghost" id="btnSelectAll">全选</button>
           <button class="btn ghost" id="btnClear">清空</button>
-          <button class="btn primary" id="btnSpeed">测速选中 <span id="selCount" class="badge">0</span></button>
+          <button class="btn primary" id="btnSpeed">服务端测速 <span id="selCount" class="badge">0</span></button>
+          <button class="btn accent" id="btnBindSpeed">🔗绑定子域·浏览器实测</button>
+          <button class="btn ghost" id="btnUnbind" disabled>解绑清理</button>
         </div>
       </div>
       <div class="tabs" id="ipTabs"></div>
       <div id="ipList" class="ip-list"></div>
-      <p class="hint">服务端测速为 Cloudflare 边缘节点参考延迟（对 CF 官方 IP 为就近值）；勾选用作订阅时请以客户端实测为准。</p>
+      <p class="hint">「服务端测速」为 Cloudflare 边缘参考延迟（CF 官方 IP 是就近值，仅供参考）；「绑定子域·浏览器实测」会把选中 IP 绑成 <code>*.goodip.cc.cd</code> 子域（有证书、不超时），从你浏览器测真实延迟，最适合按当前网络优选。测完点「解绑清理」删 DNS 记录。</p>
     </section>
 
     <!-- 订阅生成 -->
@@ -71,6 +73,7 @@
         <label>端口 <input id="subPort" class="input" value="443" /></label>
       </div>
       <div class="actions">
+        <label class="chk"><input type="checkbox" id="subUseDomain" /> 用 <code>*.goodip.cc.cd</code> 子域（需先在②点「绑定子域·浏览器实测」）</label>
         <button class="btn primary" id="btnGenSub">生成订阅</button>
         <button class="btn ghost" id="btnCopySub">复制</button>
         <span id="subInfo" class="hint"></span>
