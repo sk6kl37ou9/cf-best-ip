@@ -112,7 +112,20 @@ function renderIps() {
 }
 function updateSelCount() { $('#selCount').textContent = state.selected.size; }
 
-/* ---------- 批量测速（服务端 /api/speed） ---------- */
+/* ---------- 批量测速（服务端 /api/speed，测完自动按延迟排序） ---------- */
+function sortKey(ip, results) {
+  const r = results[ip];
+  if (!r) return { grp: 3, ms: Infinity }; // 未测速
+  if (!r.ok) return { grp: 2, ms: Infinity }; // 超时
+  return { grp: 1, ms: r.ms }; // 正常，按延迟
+}
+function sortIps(arr, results) {
+  return [...arr].sort((a, b) => {
+    const ka = sortKey(a.ip, results), kb = sortKey(b.ip, results);
+    if (ka.grp !== kb.grp) return ka.grp - kb.grp;
+    return ka.ms - kb.ms;
+  });
+}
 async function speedSelected() {
   if (state.selected.size === 0) { alert('请先勾选要测速的 IP'); return; }
   const ips = [...state.selected];
@@ -125,7 +138,13 @@ async function speedSelected() {
       d.results.forEach((r) => { all[r.host] = r; });
     } catch {}
   }
-  // 回填
+  // 按延迟自动排序（测过的按 ms 升序，超时次之，未测最后）再重渲染
+  const cur = state.ips[state.group];
+  if (cur && cur.length) {
+    state.ips[state.group] = sortIps(cur, all);
+    renderIps();
+  }
+  // 回填延迟到重渲染后的 DOM
   document.querySelectorAll('.ms[data-ms]').forEach((el) => {
     const ip = el.dataset.ms; const r = all[ip];
     if (!r) return;
@@ -211,6 +230,27 @@ async function copySub() {
   try { await navigator.clipboard.writeText(v); $('#subInfo').textContent = '已复制'; } catch {}
 }
 
+/* ---------- 优选 IP API（一键生成纯文本地址，供 free-bw8 等） ---------- */
+async function genApiUrl() {
+  if (state.selected.size === 0) { alert('请先勾选要用的 IP'); return; }
+  const port = ($('#apiPort').value || '443').trim() || '443';
+  const ips = [...state.selected].join(',');
+  const url = `${API}/api/iplist?ips=${encodeURIComponent(ips)}&port=${port}`;
+  $('#apiUrl').value = url;
+  $('#apiInfo').textContent = `已生成优选IP API（${state.selected.size} 个 IP）`;
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    const txt = await r.text();
+    const lines = txt.trim().split('\n').filter(Boolean);
+    $('#apiPreview').textContent = lines.slice(0, 15).join('\n') + (lines.length > 15 ? `\n… 共 ${lines.length} 个` : '');
+  } catch { $('#apiPreview').textContent = ''; }
+}
+async function copyApiUrl() {
+  const v = $('#apiUrl').value;
+  if (!v) return;
+  try { await navigator.clipboard.writeText(v); $('#apiInfo').textContent = '已复制 API URL'; } catch {}
+}
+
 /* ---------- 域名配优选 IP ---------- */
 async function genDns() {
   const domain = $('#dnsDomain').value.trim();
@@ -236,6 +276,8 @@ $('#btnClear').onclick = () => { state.selected.clear(); renderIps(); };
 $('#ipSearch').oninput = renderIps;
 $('#btnGenSub').onclick = genSub;
 $('#btnCopySub').onclick = copySub;
+$('#btnGenApi').onclick = genApiUrl;
+$('#btnCopyApi').onclick = copyApiUrl;
 $('#btnDns').onclick = genDns;
 
 /* ---------- 启动 ---------- */

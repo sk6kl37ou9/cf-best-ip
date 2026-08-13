@@ -118,6 +118,24 @@ export default {
       });
     }
 
+    // 优选IP纯文本列表（供 free-bw8 / WorkerVless2sub 等订阅生成器的 addressesapi 使用）
+    // 返回 text/plain：每行 IP:端口#地区
+    if (path === '/api/iplist') {
+      const ips = (url.searchParams.get('ips') || '').split(',').map((s) => s.trim()).filter(Boolean);
+      const port = url.searchParams.get('port') || '443';
+      const all = await kvJson(env, 'ips', null);
+      const cmap = {};
+      if (all) {
+        for (const g of ['cf', 'bestproxy', 'proxy']) {
+          for (const x of all[g] || []) cmap[x.ip] = x.country || 'CF';
+        }
+      }
+      const lines = ips.map((ip) => `${ip}:${port}#${cmap[ip] || 'CF'}`);
+      return new Response(lines.join('\n'), {
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', ...CORS },
+      });
+    }
+
     // DNS 自动绑定：把优选IP绑成子域（带证书，浏览器可真测；订阅可用子域替代裸IP）
     // 依赖 Worker Secret CF_DNS_TOKEN（DNS:Edit 权限）+ goodip.cc.cd 所在 zone
     if (path === '/api/dns-bind') {
