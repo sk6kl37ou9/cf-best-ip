@@ -1,187 +1,188 @@
 const API = 'https://api.goodip.cc.cd';
 const $ = (s) => document.querySelector(s);
 
-// ---------- 定位 ----------
+const state = {
+  me: null,
+  ips: { cf: [], bestproxy: [], proxy: [] },
+  group: 'cf',
+  selected: new Set(),
+  domains: [],
+};
+
+async function api(path) {
+  const r = await fetch(API + path, { cache: 'no-store' });
+  if (!r.ok) throw new Error(path + ' -> ' + r.status);
+  return r.json();
+}
+
+/* ---------- 定位 ---------- */
 async function loadMe() {
-  const el = $('#loc');
   try {
-    const r = await fetch(`${API}/api/me`);
-    const d = await r.json();
+    const d = await api('/api/me');
+    state.me = d;
+    $('#meIp').textContent = d.ip || '—';
     const g = d.geo;
-    if (g) {
-      el.innerHTML = `
-        <span><span class="k">你的 IP</span> <span class="v">${g.ip}</span></span>
-        <span><span class="k">国家</span> <b>${g.country} (${g.countryCode})</b></span>
-        <span><span class="k">省份</span> <span class="v">${g.region || '-'}</span></span>
-        <span><span class="k">城市</span> <span class="v">${g.city || '-'}</span></span>
-        <span><span class="k">运营商</span> <span class="v">${g.isp || g.org || '-'}</span></span>
-        <span><span class="k">ASN</span> <span class="v">${g.asn ? 'AS' + g.asn : '-'}</span></span>
-        <span><span class="k">CF 边缘</span> <span class="v">${d.edge?.colo || '-'}</span></span>`;
-    } else {
-      el.innerHTML = `<span><span class="k">IP</span> <span class="v">${d.ip}</span></span><span><span class="k">CF 边缘</span> <span class="v">${d.edge?.colo || '-'}</span></span><span class="muted">（地理定位暂不可用）</span>`;
-    }
+    $('#meGeo').textContent = g ? `${g.country || ''} ${g.region || ''} ${g.city || ''}`.trim() || '—' : '—';
+    const c = d.carrier || { code: 'AB', label: '境外' };
+    $('#meCarrier').innerHTML = `<span class="tag ${c.code === 'AB' ? '' : 'ok'}">${c.label}（${c.code}）</span>`;
+    $('#meEdge').textContent = d.edge ? `${d.edge.country} · ${d.edge.colo}` : '—';
+    $('#locText').textContent = `${d.ip} · ${c.label}`;
+    $('.dot').style.background = 'var(--ok)';
   } catch (e) {
-    el.innerHTML = `<span class="muted">定位失败：${e.message}</span>`;
+    $('#locText').textContent = '定位失败';
   }
 }
 
-// ---------- 优选节点实测 ----------
-let NODES = [];
-async function loadNodes() {
-  const r = await fetch(`${API}/api/nodes`);
-  const d = await r.json();
-  NODES = d.nodes || [];
-  renderNodes(NODES);
+/* ---------- 优选域名实测（浏览器真实延迟） ---------- */
+async function loadDomains() {
+  try {
+    const d = await api('/api/nodes');
+    state.domains = d.nodes || [];
+  } catch { state.domains = []; }
+  renderDomains();
+  probeDomains();
 }
-
-function renderNodes(list) {
-  const box = $('#nodes');
-  box.innerHTML = '';
-  list.forEach((n) => {
-    const div = document.createElement('div');
-    div.className = 'node';
-    div.id = `node-${CSS.escape(n.id)}`;
-    div.innerHTML = `
-      <div>
-        <div class="name">${n.label}</div>
-        <div class="note">${n.host}${n.note ? ' · ' + n.note : ''}</div>
-        <div class="bar" style="width:0"></div>
+async function probeDomains() {
+  const box = $('#domainList');
+  box.innerHTML = state.domains.map((n) => `
+    <div class="domain-row" data-host="${n.host}">
+      <div><div class="name">${n.name}</div><div class="meta">${n.host} ${n.note ? '· ' + n.note : ''}</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="bar"><i style="width:0%"></i></div>
+        <span class="tag">测速中…</span>
       </div>
-      <div class="lat" id="lat-${CSS.escape(n.id)}"><span class="muted">未测</span></div>`;
-    box.appendChild(div);
-  });
-}
-
-async function ping(host, timeout = 4000) {
-  const t0 = performance.now();
-  try {
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), timeout);
-    await fetch(`https://${host}/cdn-cgi/trace`, { method: 'GET', mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
-    clearTimeout(id);
-    return performance.now() - t0;
-  } catch {
-    return null;
-  }
-}
-
-async function testNodes() {
-  const btn = $('#btn-test');
-  btn.disabled = true;
-  $('#speed-info').innerHTML = '测速中…（每节点 3 次取平均）';
-  const results = [];
-  for (const n of NODES) {
-    const samples = [];
-    for (let i = 0; i < 3; i++) samples.push(await ping(n.host));
-    const ok = samples.filter((x) => x != null);
-    const avg = ok.length ? ok.reduce((a, b) => a + b, 0) / ok.length : null;
-    results.push({ n, avg, loss: samples.length - ok.length });
-    setLat(n.id, avg, samples.length - ok.length);
-  }
-  results.sort((a, b) => (a.avg ?? 1e9) - (b.avg ?? 1e9));
-  const ranked = results.map((r) => r.n);
-  renderNodes(ranked);
-  results.forEach((r, i) => {
-    setLat(r.n.id, r.avg, r.loss);
-    if (i === 0 && r.avg != null) $('#node-' + CSS.escape(r.n.id))?.classList.add('best');
-  });
-  // 整体下载速度（speed.cloudflare.com）
-  const sp = await measureSpeed();
-  $('#speed-info').innerHTML = `测速完成。最快节点：<b>${results[0]?.n.label || '-'}</b>（${results[0]?.avg ? results[0].avg.toFixed(0) + ' ms' : '超时'}）。你的网络→Cloudflare 下载速度：<b>${sp ? sp.toFixed(2) + ' MB/s' : '—'}</b>`;
-  btn.disabled = false;
-}
-
-function setLat(id, avg, loss) {
-  const el = $('#lat-' + CSS.escape(id));
-  if (!el) return;
-  const node = $('#node-' + CSS.escape(id));
-  const bar = node?.querySelector('.bar');
-  if (avg == null) {
-    el.innerHTML = `<span class="to">超时${loss ? ` (丢${loss}/3)` : ''}</span>`;
-    if (bar) bar.style.width = '0';
-    return;
-  }
-  el.innerHTML = `<span class="ms">${avg.toFixed(0)} ms</span>`;
-  if (bar) bar.style.width = Math.max(8, Math.min(100, 100 - avg / 3)) + '%';
-}
-
-async function measureSpeed() {
-  try {
+    </div>`).join('');
+  for (const n of state.domains) {
+    const row = box.querySelector(`[data-host="${n.host}"]`);
     const t0 = performance.now();
-    const r = await fetch('https://speed.cloudflare.com/__down?bytes=25000000', { cache: 'no-store', mode: 'no-cors' });
-    await r.blob();
-    const sec = (performance.now() - t0) / 1000;
-    return (25000000 / sec) / 1024 / 1024;
-  } catch {
-    return null;
+    let ok = false;
+    try {
+      await fetch(`https://${n.host}/cdn-cgi/trace`, { mode: 'no-cors', cache: 'no-store', redirect: 'manual' });
+      ok = true;
+    } catch {}
+    const ms = Math.round(performance.now() - t0);
+    const pct = Math.max(6, Math.min(100, 100 - ms / 2));
+    row.querySelector('.bar > i').style.width = pct + '%';
+    const tag = row.querySelector('.tag');
+    tag.textContent = ok ? `${ms} ms` : '超时';
+    tag.className = 'tag ' + (ok ? 'ok' : 'bad');
   }
 }
 
-// ---------- 各运营商优选 IP ----------
-let currentGroup = 'ct';
-async function loadIps(group) {
-  currentGroup = group;
-  const r = await fetch(`${API}/api/ips?group=${group}`);
-  const d = await r.json();
-  const ips = d.ips || [];
-  const box = $('#ip-list');
-  box.innerHTML = '';
-  ips.forEach((ip, i) => {
-    const row = document.createElement('label');
-    row.className = 'ip-row';
-    row.innerHTML = `<input type="checkbox" class="ipchk" value="${ip}" /><span class="ip">${ip}</span><span class="tag">#${i + 1}</span>`;
-    box.appendChild(row);
+/* ---------- 优选 IP 库 ---------- */
+async function loadIps() {
+  try {
+    const d = await api('/api/ips');
+    if (d.ips) state.ips = d.ips;
+  } catch {}
+  renderTabs();
+  renderIps();
+}
+function renderTabs() {
+  const labels = { cf: `优选 CF 官方 (${state.ips.cf.length})`, bestproxy: `优选反代 (${state.ips.bestproxy.length})`, proxy: `反代池 (${state.ips.proxy.length})` };
+  $('#ipTabs').innerHTML = Object.keys(labels).map((g) =>
+    `<button class="tab ${g === state.group ? 'active' : ''}" data-g="${g}">${labels[g]}</button>`).join('');
+  $('#ipTabs').querySelectorAll('.tab').forEach((b) => b.onclick = () => { state.group = b.dataset.g; renderTabs(); renderIps(); });
+}
+function currentIps() {
+  const q = ($('#ipSearch').value || '').trim().toUpperCase();
+  let arr = state.ips[state.group] || [];
+  if (q) arr = arr.filter((x) => (x.country || '').toUpperCase().includes(q) || x.ip.includes(q));
+  return arr;
+}
+function renderIps() {
+  const arr = currentIps();
+  $('#ipList').innerHTML = arr.map((x) => `
+    <div class="ip-row ${state.selected.has(x.ip) ? 'sel' : ''}" data-ip="${x.ip}">
+      <input type="checkbox" ${state.selected.has(x.ip) ? 'checked' : ''} />
+      <span class="ip">${x.ip}</span>
+      ${x.country ? `<span class="cc">${x.country}</span>` : ''}
+      <span class="ms" data-ms="${x.ip}">—</span>
+    </div>`).join('');
+  $('#ipList').querySelectorAll('.ip-row').forEach((row) => {
+    const ip = row.dataset.ip;
+    row.querySelector('input').onchange = (e) => {
+      if (e.target.checked) state.selected.add(ip); else state.selected.delete(ip);
+      row.classList.toggle('sel', e.target.checked);
+      updateSelCount();
+    };
+    row.querySelector('.ip').onclick = () => { row.querySelector('input').click(); };
   });
+  updateSelCount();
+}
+function updateSelCount() { $('#selCount').textContent = state.selected.size; }
+
+/* ---------- 批量测速（服务端 /api/speed） ---------- */
+async function speedSelected() {
+  if (state.selected.size === 0) { alert('请先勾选要测速的 IP'); return; }
+  const ips = [...state.selected];
+  $('#btnSpeed').disabled = true;
+  const all = {};
+  for (let i = 0; i < ips.length; i += 40) {
+    const batch = ips.slice(i, i + 40).join(',');
+    try {
+      const d = await api('/api/speed?hosts=' + encodeURIComponent(batch));
+      d.results.forEach((r) => { all[r.host] = r; });
+    } catch {}
+  }
+  // 回填
+  document.querySelectorAll('.ms[data-ms]').forEach((el) => {
+    const ip = el.dataset.ms; const r = all[ip];
+    if (!r) return;
+    if (r.ok) { el.textContent = r.ms + ' ms'; el.className = 'ms ok'; }
+    else { el.textContent = '超时'; el.className = 'ms bad'; }
+  });
+  $('#btnSpeed').disabled = false;
 }
 
-// ---------- 订阅生成 ----------
-function selectedIps() {
-  return [...document.querySelectorAll('.ipchk:checked')].map((c) => c.value);
-}
+/* ---------- 订阅生成 ---------- */
 async function genSub() {
-  const type = $('#sub-type').value;
-  const secret = $('#sub-secret').value.trim();
-  const sni = $('#sub-sni').value.trim() || 'www.visa.cn';
-  const port = $('#sub-port').value.trim() || '443';
-  const ips = $('#sub-ips').value.split(',').map((s) => s.trim()).filter(Boolean);
-  if (!ips.length) return alert('请先填入 IP（点上方「用选中生成订阅」）');
-  const params = new URLSearchParams({ type, ips: ips.join(','), sni, port });
-  if (type === 'trojan') { if (secret) params.set('password', secret); }
-  else { if (secret) params.set('uuid', secret); }
-  const r = await fetch(`${API}/api/sub?${params}`);
-  const text = await r.text();
-  const box = $('#sub-result');
-  box.textContent = text;
-  box.classList.add('show');
-  box.dataset.raw = text;
-  copyText(text);
+  if (state.selected.size === 0) { alert('请先勾选要生成订阅的 IP'); return; }
+  const type = $('#subType').value;
+  const uuid = $('#subUuid').value.trim();
+  const sni = $('#subSni').value.trim() || 'www.visa.cn';
+  const port = $('#subPort').value.trim() || '443';
+  const ips = [...state.selected].join(',');
+  const url = `/api/sub?type=${type}&ips=${encodeURIComponent(ips)}&sni=${encodeURIComponent(sni)}&port=${port}` + (uuid ? `&uuid=${encodeURIComponent(uuid)}` : '');
+  try {
+    const r = await fetch(API + url, { cache: 'no-store' });
+    const text = await r.text();
+    $('#subResult').value = (type === 'vless' || type === 'trojan') ? API + url : text;
+    $('#subInfo').textContent = `已生成 ${state.selected.size} 个节点 · ${type}`;
+  } catch (e) { $('#subInfo').textContent = '生成失败：' + e.message; }
+}
+async function copySub() {
+  const v = $('#subResult').value;
+  if (!v) return;
+  try { await navigator.clipboard.writeText(v); $('#subInfo').textContent = '已复制'; } catch {}
 }
 
-function copyText(t) {
-  navigator.clipboard?.writeText(t).catch(() => {});
+/* ---------- 域名配优选 IP ---------- */
+async function genDns() {
+  const domain = $('#dnsDomain').value.trim();
+  if (!domain) { alert('请输入你的域名'); return; }
+  try {
+    const d = await api('/api/dns-config?domain=' + encodeURIComponent(domain));
+    const ips = (d.recommendedIps || []).map((ip) => `<div class="ip-line">${ip}</div>`).join('');
+    const tut = (d.tutorial || []).map((t) => `<li>${t}</li>`).join('');
+    $('#dnsResult').innerHTML = `
+      <div class="note">${d.note}</div>
+      <div style="margin-top:10px"><b>推荐填入 DNS 的优选 IP（取 CF 官方已优选前 ${d.recommendedIps.length} 个）：</b>${ips}</div>
+      <ol>${tut}</ol>`;
+  } catch (e) { $('#dnsResult').innerHTML = '<div class="note">生成失败：' + e.message + '</div>'; }
 }
 
-// ---------- 事件 ----------
-$('#btn-test').addEventListener('click', testNodes);
-document.querySelectorAll('.tab').forEach((t) =>
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
-    t.classList.add('active');
-    loadIps(t.dataset.group);
-  })
-);
-$('#ip-sel-all').addEventListener('click', () => document.querySelectorAll('.ipchk').forEach((c) => (c.checked = true)));
-$('#ip-sel-none').addEventListener('click', () => document.querySelectorAll('.ipchk').forEach((c) => (c.checked = false)));
-$('#ip-copy').addEventListener('click', () => copyText(selectedIps().join('\n')));
-$('#ip-to-sub').addEventListener('click', () => {
-  const s = selectedIps();
-  if (!s.length) return alert('请先勾选 IP');
-  $('#sub-ips').value = s.join(',');
-  document.querySelector('section:nth-of-type(3)').scrollIntoView({ behavior: 'smooth' });
-});
-$('#btn-sub').addEventListener('click', genSub);
+/* ---------- 事件绑定 ---------- */
+$('#btnProbeDomains').onclick = probeDomains;
+$('#btnSpeed').onclick = speedSelected;
+$('#btnSelectAll').onclick = () => { currentIps().forEach((x) => state.selected.add(x.ip)); renderIps(); };
+$('#btnClear').onclick = () => { state.selected.clear(); renderIps(); };
+$('#ipSearch').oninput = renderIps;
+$('#btnGenSub').onclick = genSub;
+$('#btnCopySub').onclick = copySub;
+$('#btnDns').onclick = genDns;
 
-// ---------- 初始化 ----------
+/* ---------- 启动 ---------- */
 loadMe();
-loadNodes();
-loadIps('ct');
+loadDomains();
+loadIps();

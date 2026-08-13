@@ -1,0 +1,20 @@
+name: fetch-ips
+on:
+  schedule:
+    - cron: '17 */1 * * *'   # 每小时第17分钟（错峰，避免整点限流）
+  workflow_dispatch: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 拉取 IPDB 实时优选 IP 写入 KV
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+        run: node scripts/fetch-ips.mjs

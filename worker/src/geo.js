@@ -64,3 +64,16 @@ export async function getGeo(ip, env) {
   }
   return geo;
 }
+
+// 运营商识别：从 ISP/Org/ASN 字符串推断访客出口运营商（吸收 GetCFipToDns 的 CM/CU/CT 分组思路）
+export function carrierOf(geo) {
+  if (!geo) return { code: 'AB', label: '境外' };
+  const s = `${geo.isp || ''} ${geo.org || ''} ${geo.asnOrg || ''}`.toLowerCase();
+  const cn = geo.countryCode === 'CN';
+  if (/移动|mobile|cmcc/.test(s)) return { code: 'CM', label: '中国移动' };
+  if (/联通|unicom/.test(s)) return { code: 'CU', label: '中国联通' };
+  if (/电信|telecom|chinatelecom/.test(s)) return { code: 'CT', label: '中国电信' };
+  if (/腾讯|阿里|华为|网宿|百度|腾讯云|阿里云/.test(s)) return { code: 'CN-IDC', label: '国内 IDC' };
+  if (cn) return { code: 'CN', label: '中国' };
+  return { code: 'AB', label: '境外' };
+}

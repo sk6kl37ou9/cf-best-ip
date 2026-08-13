@@ -1,93 +1,103 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CF 优选 IP · 按你的网络实测</title>
-  <link rel="stylesheet" href="./style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CF 优选 IP · 实时优选 · goodip.cc.cd</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="hero">
-    <div class="wrap">
-      <h1>☁️ CF 优选 IP</h1>
-      <p class="sub">按你当前网络实测 Cloudflare 优选节点 · 反代 IP 防 DNS 泄露</p>
-      <div id="loc" class="loc-card loading">定位中…</div>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⚡</span>
+      <div>
+        <h1>CF 优选 IP</h1>
+        <p class="sub">根据当前网络自动优选 · 实时数据源 <a href="https://github.com/ymyuuu/IPDB" target="_blank" rel="noreferrer">ymyuu/IPDB</a></p>
+      </div>
+    </div>
+    <div id="locate" class="locate">
+      <span class="dot"></span><span id="locText">定位中…</span>
     </div>
   </header>
 
-  <main class="wrap">
-    <!-- 1. 优选节点实测 -->
-    <section class="panel">
-      <div class="panel-head">
-        <h2>① 优选节点实测 <span class="muted">（浏览器真测延迟，按你的网络排序）</span></h2>
-        <button id="btn-test" class="btn primary">开始测速</button>
-      </div>
-      <div id="nodes" class="nodes"></div>
-      <div id="speed-info" class="speed-info"></div>
-    </section>
-
-    <!-- 2. 各运营商优选 IP -->
-    <section class="panel">
-      <div class="panel-head">
-        <h2>② 各运营商优选 IP <span class="muted">（来自维护者已测速源，可直接用/订阅）</span></h2>
-      </div>
-      <div class="tabs" id="isp-tabs">
-        <button class="tab active" data-group="ct">电信</button>
-        <button class="tab" data-group="cu">联通</button>
-        <button class="tab" data-group="cm">移动</button>
-        <button class="tab" data-group="global">全球</button>
-      </div>
-      <div class="ip-tools">
-        <button id="ip-sel-all" class="btn small">全选</button>
-        <button id="ip-sel-none" class="btn small">清空</button>
-        <button id="ip-copy" class="btn small">复制选中</button>
-        <button id="ip-to-sub" class="btn small primary">用选中生成订阅 →</button>
-      </div>
-      <div id="ip-list" class="ip-list"></div>
-    </section>
-
-    <!-- 3. 订阅生成 + 防泄露 -->
-    <section class="panel">
-      <div class="panel-head">
-        <h2>③ 订阅生成 <span class="muted">（IP 直连 + ECH + DoH，防 DNS 泄露）</span></h2>
-      </div>
-      <div class="form-grid">
-        <label>协议
-          <select id="sub-type">
-            <option value="vless">vless (v2rayN)</option>
-            <option value="trojan">trojan (v2rayN)</option>
-            <option value="clash">clash (mihomo yaml)</option>
-            <option value="singbox">sing-box (json)</option>
-          </select>
-        </label>
-        <label>UUID / 密码
-          <input id="sub-secret" type="text" placeholder="vless 填 uuid，trojan 填密码" />
-        </label>
-        <label>SNI / 反代域名
-          <input id="sub-sni" type="text" value="www.visa.cn" />
-        </label>
-        <label>端口
-          <input id="sub-port" type="text" value="443" />
-        </label>
-      </div>
-      <label class="block">选中 IP（逗号分隔，或点上方「用选中生成订阅」）
-        <textarea id="sub-ips" rows="3" placeholder="104.16.0.1,172.67.1.1"></textarea>
-      </label>
-      <button id="btn-sub" class="btn primary">生成订阅</button>
-      <div id="sub-result" class="sub-result"></div>
-      <div class="leak-note">
-        <b>防 DNS 泄露三件套：</b>
-        ① server 用 <code>IP 字面量</code>，客户端<strong>不解析</strong>目标域名 → 运营商看不到你访问谁；
-        ② <code>ECH</code> 加密 SNI → 连域名都不暴露；
-        ③ <code>DoH 1.1.1.1</code> 兜底解析。三者已在生成配置中启用。
+  <main>
+    <!-- 定位卡 -->
+    <section class="card" id="meCard">
+      <div class="me-grid">
+        <div class="me-item"><label>你的 IP</label><b id="meIp">—</b></div>
+        <div class="me-item"><label>地理位置</label><b id="meGeo">—</b></div>
+        <div class="me-item"><label>运营商</label><b id="meCarrier">—</b></div>
+        <div class="me-item"><label>命中节点</label><b id="meEdge">—</b></div>
       </div>
     </section>
 
-    <footer class="foot">
-      数据来源：cf.090227.xyz 各运营商优选 IP · GitHub IPDB 全球反代池 · 地理定位 api.ip.sb
-    </footer>
+    <!-- 优选域名实测 -->
+    <section class="card">
+      <div class="card-head">
+        <h2>① 优选域名实测 <small>浏览器真实延迟（有证书，不超时）</small></h2>
+        <button class="btn ghost" id="btnProbeDomains">测一下</button>
+      </div>
+      <div id="domainList" class="domain-list"></div>
+    </section>
+
+    <!-- 优选 IP 库 -->
+    <section class="card">
+      <div class="card-head">
+        <h2>② 优选 IP 库 <small>实时优选 · 勾选后批量测速</small></h2>
+        <div class="actions">
+          <input id="ipSearch" class="input" placeholder="过滤国家/地区，如 HK JP" />
+          <button class="btn ghost" id="btnSelectAll">全选</button>
+          <button class="btn ghost" id="btnClear">清空</button>
+          <button class="btn primary" id="btnSpeed">测速选中 <span id="selCount" class="badge">0</span></button>
+        </div>
+      </div>
+      <div class="tabs" id="ipTabs"></div>
+      <div id="ipList" class="ip-list"></div>
+      <p class="hint">服务端测速为 Cloudflare 边缘节点参考延迟（对 CF 官方 IP 为就近值）；勾选用作订阅时请以客户端实测为准。</p>
+    </section>
+
+    <!-- 订阅生成 -->
+    <section class="card">
+      <div class="card-head"><h2>③ 订阅生成 <small>勾选的 IP → vless / trojan / clash / sing-box（含 ECH + DoH）</small></h2></div>
+      <div class="form-row">
+        <label>协议 <select id="subType" class="input">
+          <option value="vless">vless</option>
+          <option value="trojan">trojan</option>
+          <option value="clash">clash</option>
+          <option value="singbox">sing-box</option>
+        </select></label>
+        <label>UUID / 密码 <input id="subUuid" class="input" placeholder="vless 填 uuid；trojan 填密码" /></label>
+        <label>SNI 域名 <input id="subSni" class="input" value="www.visa.cn" /></label>
+        <label>端口 <input id="subPort" class="input" value="443" /></label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="btnGenSub">生成订阅</button>
+        <button class="btn ghost" id="btnCopySub">复制</button>
+        <span id="subInfo" class="hint"></span>
+      </div>
+      <textarea id="subResult" class="result" readonly placeholder="生成的订阅链接 / 配置将显示在这里"></textarea>
+    </section>
+
+    <!-- 我的域名配优选 IP -->
+    <section class="card">
+      <div class="card-head"><h2>④ 我的域名配优选 IP <small>吸收 GetCFipToDns：把优选 IP 填 DNS，让网站走 CF 优选节点</small></h2></div>
+      <div class="form-row">
+        <label>你的域名 <input id="dnsDomain" class="input" placeholder="例如 xinggu.cc" /></label>
+        <button class="btn primary" id="btnDns">生成配置</button>
+      </div>
+      <div id="dnsResult"></div>
+    </section>
+
+    <!-- 反代玩法 -->
+    <section class="card">
+      <div class="card-head"><h2>⑤ 反代玩法 <small>吸收 ymyuu/Cloudflare-Workers-Proxy</small></h2></div>
+      <p class="hint">把优选 IP 用于访问目标站点：部署一个 Cloudflare Worker 反向代理（<code>https://你的worker/目标URL</code>），客户端把请求发往 Worker，Worker 转发到目标并原样返回。配合 ② 中的优选 IP 作为 SNI/上游，可绕开 DNS 污染。</p>
+      <p class="hint">推荐组合：客户端 →（DoH 1.1.1.1 + ECH）→ 优选 IP（③ 订阅）→ 目标站点。详见 <a href="https://github.com/ymyuuu/Cloudflare-Workers-Proxy" target="_blank" rel="noreferrer">Cloudflare-Workers-Proxy</a>。</p>
+    </section>
   </main>
 
-  <script src="./app.js"></script>
+  <footer class="foot">数据每小时从 IPDB 刷新 · 定位基于真实出口 IP · <a href="https://github.com/sk6kl37ou9/cf-best-ip" target="_blank" rel="noreferrer">GitHub</a></footer>
+
+  <script src="app.js"></script>
 </body>
 </html>
