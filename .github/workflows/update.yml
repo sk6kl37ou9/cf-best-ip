@@ -1,0 +1,29 @@
+name: update-ips
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 每日 04:00 UTC 刷新优选 IP
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 刷新优选IP源（失败则用仓库内置快照）
+        run: |
+          curl -fsSL "https://cf.090227.xyz/ct?ips=50" -o data/sources/ct.txt || true
+          curl -fsSL "https://cf.090227.xyz/cu?ips=50" -o data/sources/cu.txt || true
+          curl -fsSL "https://cf.090227.xyz/cm?ips=50" -o data/sources/cm.txt || true
+          curl -fsSL "https://raw.githubusercontent.com/liwp914/IPDB/main/bestcf.txt" -o data/sources/global.txt || true
+      - name: 生成 data.js 快照
+        run: node scripts/gen-data.mjs
+      - name: 写入 Cloudflare KV
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+        run: node scripts/sync-dns.mjs
