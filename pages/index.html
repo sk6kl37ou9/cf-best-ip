@@ -8,21 +8,26 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <span class="logo">⚡</span>
-      <div>
-        <h1>CF 优选 IP</h1>
-        <p class="sub">根据当前网络自动优选 · 实时数据源 <a href="https://github.com/ymyuuu/IPDB" target="_blank" rel="noreferrer">ymyuu/IPDB</a></p>
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="logo">⚡</span>
+        <div>
+          <h1>CF 优选 IP</h1>
+          <p class="sub">根据当前网络自动优选 · 实时数据源 <a href="https://github.com/ymyuuu/IPDB" target="_blank" rel="noreferrer">ymyuu/IPDB</a></p>
+        </div>
       </div>
-    </div>
-    <div id="locate" class="locate">
-      <span class="dot"></span><span id="locText">定位中…</span>
+      <div id="locate" class="locate">
+        <span class="dot"></span><span id="locText">定位中…</span>
+      </div>
     </div>
   </header>
 
   <main>
     <!-- 定位卡 -->
     <section class="card" id="meCard">
+      <div class="card-head">
+        <h2><span class="icon">📍</span> 你的网络信息</h2>
+      </div>
       <div class="me-grid">
         <div class="me-item"><label>你的 IP</label><b id="meIp">—</b></div>
         <div class="me-item"><label>地理位置</label><b id="meGeo">—</b></div>
@@ -34,7 +39,7 @@
     <!-- 优选域名实测 -->
     <section class="card">
       <div class="card-head">
-        <h2>① 优选域名实测 <small>浏览器真实延迟（有证书，不超时）</small></h2>
+        <h2><span class="icon">🌐</span> 优选域名实测 <small>浏览器真实延迟（有证书，不超时）</small></h2>
         <button class="btn ghost" id="btnProbeDomains">测一下</button>
       </div>
       <div id="domainList" class="domain-list"></div>
@@ -43,7 +48,7 @@
     <!-- 优选 IP 库 -->
     <section class="card">
       <div class="card-head">
-        <h2>② 优选 IP 库 <small>实时优选 · 勾选后批量测速</small></h2>
+        <h2><span class="icon">📡</span> 优选 IP 库 <small>实时优选 · 勾选后批量测速</small></h2>
         <div class="actions">
           <input id="ipSearch" class="input" placeholder="过滤国家/地区，如 HK JP" />
           <button class="btn ghost" id="btnSelectAll">全选</button>
@@ -61,7 +66,7 @@
     <!-- 优选 IP API（供 free-bw8 等订阅生成器） -->
     <section class="card">
       <div class="card-head">
-        <h2>🎯 优选 IP API <small>勾选 IP → 一键生成纯文本地址，填 free-bw8「自定义 IP 生成订阅链接」</small></h2>
+        <h2><span class="icon">🎯</span> 优选 IP API <small>勾选 IP → 一键生成纯文本地址，填 free-bw8「自定义 IP 生成订阅链接」</small></h2>
       </div>
       <div class="form-row">
         <label>端口 <input id="apiPort" class="input" value="443" style="width:80px" /></label>
@@ -69,14 +74,16 @@
         <button class="btn ghost" id="btnCopyApi">复制</button>
         <span id="apiInfo" class="hint"></span>
       </div>
-      <textarea id="apiUrl" class="result" readonly placeholder="勾选 ② 里的 IP 后点「生成 API URL」，这里显示可直接填进 free-bw8 的地址"></textarea>
-      <p class="hint" id="apiPreview" style="white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace"></p>
+      <textarea id="apiUrl" class="result" readonly placeholder="勾选「优选 IP 库」里的 IP 后点「生成 API URL」，这里显示可直接填进 free-bw8 的地址"></textarea>
+      <p id="apiPreview"></p>
       <p class="hint">每行格式 <code>IP:端口#地区</code>。复制上面的 URL，进 free-bw8 后台 →「优选订阅生产 → 自定义 IP 生成订阅链接」粘贴，即可一键生成订阅。</p>
     </section>
 
     <!-- 订阅生成 -->
     <section class="card">
-      <div class="card-head"><h2>③ 订阅生成 <small>勾选的 IP → vless / trojan / clash / sing-box（含 ECH + DoH）</small></h2></div>
+      <div class="card-head">
+        <h2><span class="icon">⚙️</span> 订阅生成 <small>勾选的 IP → vless / trojan / clash / sing-box（含 ECH + DoH）</small></h2>
+      </div>
       <div class="form-row">
         <label>协议 <select id="subType" class="input">
           <option value="vless">vless</option>
@@ -99,7 +106,9 @@
 
     <!-- 我的域名配优选 IP -->
     <section class="card">
-      <div class="card-head"><h2>④ 我的域名配优选 IP <small>吸收 GetCFipToDns：把优选 IP 填 DNS，让网站走 CF 优选节点</small></h2></div>
+      <div class="card-head">
+        <h2><span class="icon">🔧</span> 我的域名配优选 IP <small>吸收 GetCFipToDns：把优选 IP 填 DNS，让网站走 CF 优选节点</small></h2>
+      </div>
       <div class="form-row">
         <label>你的域名 <input id="dnsDomain" class="input" placeholder="例如 xinggu.cc" /></label>
         <button class="btn primary" id="btnDns">生成配置</button>
@@ -109,7 +118,9 @@
 
     <!-- 反代玩法 -->
     <section class="card">
-      <div class="card-head"><h2>⑤ 反代玩法 <small>吸收 ymyuu/Cloudflare-Workers-Proxy</small></h2></div>
+      <div class="card-head">
+        <h2><span class="icon">🔄</span> 反代玩法 <small>吸收 ymyuu/Cloudflare-Workers-Proxy</small></h2>
+      </div>
       <p class="hint">把优选 IP 用于访问目标站点：部署一个 Cloudflare Worker 反向代理（<code>https://你的worker/目标URL</code>），客户端把请求发往 Worker，Worker 转发到目标并原样返回。配合 ② 中的优选 IP 作为 SNI/上游，可绕开 DNS 污染。</p>
       <p class="hint">推荐组合：客户端 →（DoH 1.1.1.1 + ECH）→ 优选 IP（③ 订阅）→ 目标站点。详见 <a href="https://github.com/ymyuuu/Cloudflare-Workers-Proxy" target="_blank" rel="noreferrer">Cloudflare-Workers-Proxy</a>。</p>
     </section>
