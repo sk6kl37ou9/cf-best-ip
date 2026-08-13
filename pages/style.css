@@ -457,3 +457,49 @@ select.input {
   .actions { gap: 6px; }
   .btn { padding: 8px 12px; font-size: 12px; }
 }
+
+/* ===== rev controls / pager ===== */
+.search-wrap { display: inline-flex; }
+.search-wrap.hidden { display: none; }
+.rev-controls {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; margin-bottom: 14px;
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  border-radius: var(--radius-sm);
+}
+.rev-controls .hint { margin: 0; }
+.pager { display: flex; gap: 8px; margin-left: auto; }
+.cc.port { background: rgba(6, 182, 212, 0.1); color: var(--c-accent-d); }
+
+/* ===== Skeleton loading ===== */
+.skeleton-row {
+  height: 42px; border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(226,232,240,0.5) 25%, rgba(241,245,249,0.85) 37%, rgba(226,232,240,0.5) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+/* ===== Toast ===== */
+#toastBox {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: 10px; align-items: center;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  min-width: 200px; max-width: 90vw;
+  padding: 12px 18px; border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; color: #fff;
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.25);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  opacity: 0; transform: translateY(12px) scale(.96);
+  transition: opacity .28s cubic-bezier(.4, 0, .2, 1), transform .28s cubic-bezier(.4, 0, .2, 1);
+}
+.toast.show { opacity: 1; transform: translateY(0) scale(1); }
+.toast.ok { background: linear-gradient(135deg, #10b981, #059669); }
+.toast.bad { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.toast.warn { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.toast.info { background: linear-gradient(135deg, #6366f1, #4f46e5); }

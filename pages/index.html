@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CF 优选 IP · 实时优选 · goodip.cc.cd</title>
-  <link rel="stylesheet" href="style.css?v=20260813b" />
+  <link rel="stylesheet" href="style.css?v=20260813c" />
 </head>
 <body>
   <header class="topbar">
@@ -50,7 +50,7 @@
       <div class="card-head">
         <h2><span class="icon">📡</span> 优选 IP 库 <small>实时优选 · 勾选后批量测速</small></h2>
         <div class="actions">
-          <input id="ipSearch" class="input" placeholder="过滤国家/地区，如 HK JP" />
+          <div class="search-wrap"><input id="ipSearch" class="input" placeholder="过滤国家/地区，如 HK JP" /></div>
           <button class="btn ghost" id="btnSelectAll">全选</button>
           <button class="btn ghost" id="btnClear">清空</button>
           <button class="btn primary" id="btnSpeed">服务端测速 <span id="selCount" class="badge">0</span></button>
@@ -59,8 +59,17 @@
         </div>
       </div>
       <div class="tabs" id="ipTabs"></div>
+      <div id="revControls" class="rev-controls" hidden>
+        <select id="revPort" class="input"><option value="">全部端口</option></select>
+        <select id="revCountry" class="input"><option value="">全部国家</option></select>
+        <span id="revStat" class="hint">加载中…</span>
+        <div class="pager">
+          <button id="revPrev" class="btn ghost">← 上一页</button>
+          <button id="revNext" class="btn ghost">下一页 →</button>
+        </div>
+      </div>
       <div id="ipList" class="ip-list"></div>
-      <p class="hint">「服务端测速」为 Cloudflare 边缘参考延迟（CF 官方 IP 是就近值，仅供参考）；「绑定子域·浏览器实测」会把选中 IP 绑成 <code>*.goodip.cc.cd</code> 子域（有证书、不超时），从你浏览器测真实延迟，最适合按当前网络优选。测完点「解绑清理」删 DNS 记录。</p>
+      <p class="hint">「服务端测速」为 Cloudflare 边缘参考延迟（CF 官方 IP 是就近值，仅供参考）；「绑定子域·浏览器实测」会把选中 IP 绑成 <code>*.goodip.cc.cd</code> 子域（有证书、不超时），从你浏览器测真实延迟，最适合按当前网络优选。测完点「解绑清理」删 DNS 记录。反代全量库（来自 ip.zip）按端口+国家分页，勾选后同样可生成「优选 IP API」喂 free-bw8。</p>
     </section>
 
     <!-- 优选 IP API（供 free-bw8 等订阅生成器） -->
@@ -126,8 +135,8 @@
     </section>
   </main>
 
-  <footer class="foot">数据每小时从 IPDB 刷新 · 定位基于真实出口 IP · <a href="https://github.com/sk6kl37ou9/cf-best-ip" target="_blank" rel="noreferrer">GitHub</a></footer>
+  <footer class="foot">数据每小时从 IPDB 刷新 · 定位基于真实出口 IP · <span id="footMeta"></span> · <a href="https://github.com/sk6kl37ou9/cf-best-ip" target="_blank" rel="noreferrer">GitHub</a></footer>
 
-  <script src="app.js?v=20260813b"></script>
+  <script src="app.js?v=20260813c"></script>
 </body>
 </html>

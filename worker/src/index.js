@@ -68,10 +68,25 @@ export default {
 
     // 实时优选 IP（来自 IPDB cron，KV 存储）；?group=cf|bestproxy|proxy 过滤
     if (path === '/api/ips') {
-      const all = await kvJson(env, 'ips', null);
       const group = url.searchParams.get('group');
+      if (group === 'rev') {
+        // 反代全量 IP 库（来自 ip.zip 导入，按端口+国家分类）
+        const rev = await kvJson(env, 'ipsrev', null);
+        if (!rev) return json({ error: 'rev 数据未就绪' }, 503);
+        const port = url.searchParams.get('port');
+        const country = (url.searchParams.get('country') || '').toUpperCase();
+        const limit = parseInt(url.searchParams.get('limit') || '200', 10);
+        const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+        let data = rev.data || rev;
+        if (port) data = data.filter((x) => String(x.port) === String(port));
+        if (country) data = data.filter((x) => (x.country || '').toUpperCase() === country);
+        const total = data.length;
+        const slice = data.slice(offset, offset + limit);
+        return json({ group: 'rev', ips: slice, total, port, country, limit, offset, ports: rev.ports, countries: rev.countries, meta: await kvJson(env, 'meta', null) });
+      }
+      const all = await kvJson(env, 'ips', null);
+      if (group && all && all[group]) return json({ group, ips: all[group], meta: await kvJson(env, 'meta', null) });
       if (!all) return json({ error: '数据未就绪，请等待 cron 拉取' }, 503);
-      if (group && all[group]) return json({ group, ips: all[group], meta: await kvJson(env, 'meta', null) });
       return json({ ips: all, meta: await kvJson(env, 'meta', null) });
     }
 
@@ -120,17 +135,27 @@ export default {
 
     // 优选IP纯文本列表（供 free-bw8 / WorkerVless2sub 等订阅生成器的 addressesapi 使用）
     // 返回 text/plain：每行 IP:端口#地区
+    // ips 参数支持 "IP" 或 "IP:port" 格式，后者优先使用 IP 自带端口
     if (path === '/api/iplist') {
-      const ips = (url.searchParams.get('ips') || '').split(',').map((s) => s.trim()).filter(Boolean);
-      const port = url.searchParams.get('port') || '443';
+      const rawIps = (url.searchParams.get('ips') || '').split(',').map((s) => s.trim()).filter(Boolean);
+      const defaultPort = url.searchParams.get('port') || '443';
       const all = await kvJson(env, 'ips', null);
+      const rev = await kvJson(env, 'ipsrev', null);
       const cmap = {};
       if (all) {
         for (const g of ['cf', 'bestproxy', 'proxy']) {
           for (const x of all[g] || []) cmap[x.ip] = x.country || 'CF';
         }
       }
-      const lines = ips.map((ip) => `${ip}:${port}#${cmap[ip] || 'CF'}`);
+      if (rev) {
+        for (const x of (rev.data || [])) cmap[x.ip] = x.country || cmap[x.ip] || '';
+      }
+      const lines = rawIps.map((entry) => {
+        // 支持 IP 或 IP:port 格式
+        const [ip, p] = entry.split(':');
+        const port = p || defaultPort;
+        return `${ip}:${port}#${cmap[ip] || ''}`;
+      });
       return new Response(lines.join('\n'), {
         headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', ...CORS },
       });

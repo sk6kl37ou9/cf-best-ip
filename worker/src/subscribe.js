@@ -17,7 +17,20 @@ function rootOf(host) {
   return p.length > 2 ? p.slice(1).join('.') : host;
 }
 
-function vlessOne(host, sni, uuid, port, i, isDomain) {
+// 解析 targets：支持 "IP" 或 "IP:port"。后者逐条带端口（rev 全量 IP 用），否则回退全局 port。
+function parseTargets(raw, defaultPort) {
+  return raw.map((t) => {
+    const idx = t.lastIndexOf(':');
+    if (idx > 0) {
+      const maybe = t.slice(idx + 1);
+      if (/^\d{1,5}$/.test(maybe)) return { host: t.slice(0, idx), port: maybe };
+    }
+    return { host: t, port: defaultPort };
+  });
+}
+
+function vlessOne(t, sni, uuid, i, isDomain) {
+  const { host, port } = t;
   const name = encodeURIComponent(`CF${isDomain ? '子域' : '反代'}-${i + 1}-${host}`);
   const q = new URLSearchParams({
     encryption: 'none',
@@ -35,15 +48,17 @@ function vlessOne(host, sni, uuid, port, i, isDomain) {
   return `vless://${uuid}@${host}:${port}?${q}#${name}`;
 }
 
-function trojanOne(host, sni, password, port, i, isDomain) {
+function trojanOne(t, sni, password, i, isDomain) {
+  const { host, port } = t;
   const name = encodeURIComponent(`CF${isDomain ? '子域' : '反代'}-${i + 1}-${host}`);
   const q = new URLSearchParams({ security: 'tls', sni, fp: 'chrome', type: 'ws', path: '%2F', host: sni, ech: String(ECH) }).toString();
   return `trojan://${encodeURIComponent(password)}@${host}:${port}?${q}#${name}`;
 }
 
 function clashYaml(targets, opts) {
-  const { uuid, sni, port, protocol, isDomain } = opts;
-  const proxies = targets.map((host, i) => {
+  const { uuid, sni, protocol, isDomain } = opts;
+  const proxies = targets.map((t, i) => {
+    const { host, port } = t;
     const s = isDomain ? rootOf(host) : sni;
     if (protocol === 'trojan') {
       return `  - name: CF${isDomain ? '子域' : '反代'}-${i + 1}-${host}
@@ -92,8 +107,9 @@ ${proxies}
 }
 
 function singboxJson(targets, opts) {
-  const { uuid, sni, port, protocol, isDomain } = opts;
-  const outbounds = targets.map((host, i) => {
+  const { uuid, sni, protocol, isDomain } = opts;
+  const outbounds = targets.map((t, i) => {
+    const { host, port } = t;
     const s = isDomain ? rootOf(host) : sni;
     const o = {
       type: protocol === 'trojan' ? 'trojan' : 'vless',
@@ -108,9 +124,9 @@ function singboxJson(targets, opts) {
     return o;
   });
   const first = targets[0];
-  const sd = isDomain ? rootOf(first) : sni;
+  const sd = isDomain ? rootOf(first.host) : sni;
   return JSON.stringify({
-    dns: { servers: [{ address: 'https://1.1.1.1/dns-query', detour: `CF${isDomain ? '子域' : '反代'}-1-${first}` }] },
+    dns: { servers: [{ address: 'https://1.1.1.1/dns-query', detour: `CF${isDomain ? '子域' : '反代'}-1-${first.host}` }] },
     outbounds: [...outbounds, { type: 'direct', tag: 'direct' }, { type: 'dns', tag: 'dns-out' }],
   }, null, 2);
 }
@@ -123,31 +139,31 @@ export function makeSubscription(params) {
   const port = params.get('port') || '443';
 
   const isDomain = hosts.length > 0;
-  const targets = isDomain ? hosts : ips;
+  const targets = parseTargets(isDomain ? hosts : ips, port);
   if (targets.length === 0) return new Response('缺少 ips / hosts 参数', { status: 400 });
 
   if (type === 'vless') {
     const uuid = params.get('uuid') || '00000000-0000-0000-0000-000000000000';
-    const links = targets.map((h, i) => vlessOne(h, isDomain ? rootOf(h) : sni, uuid, port, i, isDomain));
+    const links = targets.map((t, i) => vlessOne(t, isDomain ? rootOf(t.host) : sni, uuid, i, isDomain));
     return new Response(b64u(links.join('\n')), {
       headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
     });
   }
   if (type === 'trojan') {
     const password = params.get('password') || 'your-password';
-    const links = targets.map((h, i) => trojanOne(h, isDomain ? rootOf(h) : sni, password, port, i, isDomain));
+    const links = targets.map((t, i) => trojanOne(t, isDomain ? rootOf(t.host) : sni, password, i, isDomain));
     return new Response(b64u(links.join('\n')), {
       headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
     });
   }
   if (type === 'clash') {
     const uuid = params.get('uuid') || '00000000-0000-0000-0000-000000000000';
-    const yaml = clashYaml(targets, { uuid, sni, port, protocol: params.get('protocol') || 'vless', password: params.get('password'), isDomain });
+    const yaml = clashYaml(targets, { uuid, sni, protocol: params.get('protocol') || 'vless', password: params.get('password'), isDomain });
     return new Response(yaml, { headers: { 'content-type': 'text/yaml; charset=utf-8', 'cache-control': 'no-store' } });
   }
   if (type === 'singbox') {
     const uuid = params.get('uuid') || '00000000-0000-0000-0000-000000000000';
-    const json = singboxJson(targets, { uuid, sni, port, protocol: params.get('protocol') || 'vless', password: params.get('password'), isDomain });
+    const json = singboxJson(targets, { uuid, sni, protocol: params.get('protocol') || 'vless', password: params.get('password'), isDomain });
     return new Response(json, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
   }
   return new Response('未知 type', { status: 400 });
