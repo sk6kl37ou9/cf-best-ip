@@ -1,5 +1,5 @@
 // 跨域部署时把 API 指向 Worker 域名
-const API = 'https://cf-best-ip.gpcqm17284.workers.dev';
+const API = 'https://api.goodip.cc.cd';
 
 let pool = [];              // 候选池（对象数组：ip/delay/rtt/…）
 const selected = new Set(); // 用户勾选的 IP
