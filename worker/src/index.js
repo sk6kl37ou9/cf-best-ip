@@ -1,84 +1,77 @@
-import { getBest } from './geolocate.js';
+import { getGeo } from './geo.js';
 import { makeSubscription } from './subscribe.js';
+import { NODES, IPS, DOMAINS } from './data.js';
 
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET, POST, OPTIONS',
+  'access-control-allow-headers': 'content-type',
+};
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      'content-type': 'application/json;charset=utf-8',
-      'access-control-allow-origin': '*',
-    },
+    headers: { 'content-type': 'application/json; charset=utf-8', ...CORS },
   });
+}
+
+function withCors(res) {
+  for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
+  return res;
+}
+
+async function kvJson(env, key, fallback) {
+  try {
+    const v = await env.BESTIP.get(key, 'json');
+    if (v) return v;
+  } catch {}
+  return fallback;
 }
 
 export default {
   async fetch(request, env) {
-    // OPTIONS 预检
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'access-control-allow-origin': '*',
-          'access-control-allow-methods': 'GET, OPTIONS',
-          'access-control-allow-headers': '*',
-        },
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
+
+    // 访客真实地理（修复：国内直连会显示 HK 的 bug）
+    if (path === '/api/me') {
+      const ip =
+        request.headers.get('cf-connecting-ip') ||
+        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+      const geo = ip ? await getGeo(ip, env) : null;
+      return json({
+        ip,
+        geo,
+        edge: { country: request.cf?.country, colo: request.cf?.colo, city: request.cf?.city },
       });
     }
-    const res = await handle(request, env);
-    const headers = new Headers(res.headers);
-    headers.set('access-control-allow-origin', '*');
-    return new Response(res.body, { status: res.status, headers });
+
+    // 浏览器实测节点列表（优选域名 + 各运营商优选IP的可测端点）
+    if (path === '/api/nodes') {
+      const nodes = await kvJson(env, 'nodes', NODES);
+      return json({ nodes });
+    }
+
+    // 各运营商优选IP完整列表（用于复制/订阅）
+    if (path === '/api/ips') {
+      const group = url.searchParams.get('group');
+      if (group && IPS[group]) return json({ group, ips: IPS[group] });
+      return json({ ips: IPS });
+    }
+
+    // 优选域名列表
+    if (path === '/api/domains') {
+      return json({ domains: await kvJson(env, 'domains', DOMAINS) });
+    }
+
+    // 订阅生成（带 ECH + DoH）
+    if (path === '/api/sub') {
+      return withCors(makeSubscription(url.searchParams));
+    }
+
+    if (env.PAGES_URL) return Response.redirect(env.PAGES_URL, 302);
+    return new Response('CF 优选 IP', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
   },
 };
-
-async function handle(request, env) {
-  const url = new URL(request.url);
-  const path = url.pathname;
-
-  // 访客信息（含访客真实 IP）
-  if (path === '/api/me') {
-    return json({
-      ip: request.headers.get('CF-Connecting-IP') || '',
-      country: request.cf?.country,
-      city: request.cf?.city,
-      colo: request.cf?.colo,
-      asn: request.cf?.asn,
-      timezone: request.cf?.timezone,
-    });
-  }
-
-  // 最优 IP：country=auto 自动识别访客国家，否则显式指定
-  if (path === '/api/best') {
-    const req = url.searchParams.get('country') || 'auto';
-    const country = req === 'auto' ? (request.cf?.country || 'US') : req.toUpperCase();
-    const fmt = url.searchParams.get('format');
-    const data = await getBest(country, env);
-    if (!data) return json({ error: `no data for ${country}` }, 404);
-    if (fmt === 'text') {
-      return new Response(data.ips.map(i => i.ip).join('\n'), {
-        headers: { 'content-type': 'text/plain;charset=utf-8' },
-      });
-    }
-    return json(data);
-  }
-
-  // 可用国家列表
-  if (path === '/api/countries') {
-    const list = await env.BESTIP.list({ prefix: 'bestip:' });
-    const countries = list.keys.map(k => k.name.replace('bestip:', ''));
-    return json({ countries });
-  }
-
-  // 订阅
-  if (path === '/api/sub') {
-    return makeSubscription(url.searchParams, env);
-  }
-
-  // 根路径跳转到前端
-  if (env.PAGES_URL) {
-    return Response.redirect(env.PAGES_URL, 302);
-  }
-  return new Response('CF Best IP API', {
-    headers: { 'content-type': 'text/plain;charset=utf-8' },
-  });
-}

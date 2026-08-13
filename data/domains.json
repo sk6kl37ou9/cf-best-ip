@@ -1,0 +1,16 @@
+{
+  "domains": [
+    { "name": "CF 三网优选(泛域名)", "host": "youxuan.cf.090227.xyz", "note": "cf.090227.xyz 维护，三网通用" },
+    { "name": "Visa 中国", "host": "www.visa.cn", "note": "官方优选，国内可达" },
+    { "name": "Shopify", "host": "www.shopify.com", "note": "企业级 CDN，全球节点" },
+    { "name": "Ubisoft 商店", "host": "store.ubi.com", "note": "游戏厂商官方域名" },
+    { "name": "NexusMods", "host": "staticdelivery.nexusmods.com", "note": "静态资源分发" },
+    { "name": "腾讯(泛域名)", "host": "cf.tencentapp.cn", "note": "tencentapp.cn 三网优选" },
+    { "name": "byoip.top", "host": "cloudflare-dl.byoip.top", "note": "NB 优选服务维护" },
+    { "name": "秋名山", "host": "cf.877774.xyz", "note": "三网优选" },
+    { "name": "MIYU", "host": "saas.sin.fan", "note": "三网优选" },
+    { "name": "Mingyu(移动)", "host": "bestcf.030101.xyz", "note": "移动专属优化" },
+    { "name": "WeTest.Vip", "host": "cf.cloudflare.182682.xyz", "note": "泛域名优选" },
+    { "name": "Cloudflare 官方测速", "host": "speed.cloudflare.com", "note": "全球节点，用于测整体吞吐" }
+  ]
+}

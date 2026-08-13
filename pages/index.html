@@ -1,58 +1,93 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CF 优选 IP</title>
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CF 优选 IP · 按你的网络实测</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <header>
-    <h1>CF 优选 IP</h1>
-    <div id="me" class="me">识别中…</div>
+  <header class="hero">
+    <div class="wrap">
+      <h1>☁️ CF 优选 IP</h1>
+      <p class="sub">按你当前网络实测 Cloudflare 优选节点 · 反代 IP 防 DNS 泄露</p>
+      <div id="loc" class="loc-card loading">定位中…</div>
+    </div>
   </header>
 
-  <main>
-    <section>
-      <div class="detail-head">
-        <h2>优选 IP · 勾选你要的节点</h2>
-        <button id="selectAll">全选</button>
-        <button id="clearAll">清空</button>
-        <button id="reprobe">重新实测</button>
-        <button id="copySel">复制已选</button>
+  <main class="wrap">
+    <!-- 1. 优选节点实测 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>① 优选节点实测 <span class="muted">（浏览器真测延迟，按你的网络排序）</span></h2>
+        <button id="btn-test" class="btn primary">开始测速</button>
       </div>
-      <p id="hint" class="hint">正在加载候选池并实测…</p>
-      <div id="ipList"></div>
+      <div id="nodes" class="nodes"></div>
+      <div id="speed-info" class="speed-info"></div>
     </section>
 
-    <section>
-      <h2>订阅生成（用你勾选的节点）</h2>
-      <p class="hint">勾选上面的节点后，用它们生成订阅；未勾选则不会生成</p>
-      <div class="form">
-        <label>协议
-          <select id="type">
-            <option value="vless">vless</option>
-            <option value="trojan">trojan</option>
-            <option value="list">纯 IP 列表</option>
-          </select>
-        </label>
-        <label>UUID / 密码 <input id="uuid" placeholder="vless 填 UUID，trojan 填密码"></label>
-        <label>端口 <input id="port" value="443"></label>
-        <label>SNI / TLS 域名 <input id="sni" placeholder="your.domain.com"></label>
-        <label>传输
-          <select id="network">
-            <option value="ws">ws</option>
-            <option value="grpc">grpc</option>
-            <option value="tcp">tcp</option>
-          </select>
-        </label>
-        <label>路径 <input id="path" placeholder="/"></label>
-        <button id="genSub">生成订阅</button>
+    <!-- 2. 各运营商优选 IP -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>② 各运营商优选 IP <span class="muted">（来自维护者已测速源，可直接用/订阅）</span></h2>
       </div>
-      <div id="subResult" class="sub-result"></div>
+      <div class="tabs" id="isp-tabs">
+        <button class="tab active" data-group="ct">电信</button>
+        <button class="tab" data-group="cu">联通</button>
+        <button class="tab" data-group="cm">移动</button>
+        <button class="tab" data-group="global">全球</button>
+      </div>
+      <div class="ip-tools">
+        <button id="ip-sel-all" class="btn small">全选</button>
+        <button id="ip-sel-none" class="btn small">清空</button>
+        <button id="ip-copy" class="btn small">复制选中</button>
+        <button id="ip-to-sub" class="btn small primary">用选中生成订阅 →</button>
+      </div>
+      <div id="ip-list" class="ip-list"></div>
     </section>
+
+    <!-- 3. 订阅生成 + 防泄露 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>③ 订阅生成 <span class="muted">（IP 直连 + ECH + DoH，防 DNS 泄露）</span></h2>
+      </div>
+      <div class="form-grid">
+        <label>协议
+          <select id="sub-type">
+            <option value="vless">vless (v2rayN)</option>
+            <option value="trojan">trojan (v2rayN)</option>
+            <option value="clash">clash (mihomo yaml)</option>
+            <option value="singbox">sing-box (json)</option>
+          </select>
+        </label>
+        <label>UUID / 密码
+          <input id="sub-secret" type="text" placeholder="vless 填 uuid，trojan 填密码" />
+        </label>
+        <label>SNI / 反代域名
+          <input id="sub-sni" type="text" value="www.visa.cn" />
+        </label>
+        <label>端口
+          <input id="sub-port" type="text" value="443" />
+        </label>
+      </div>
+      <label class="block">选中 IP（逗号分隔，或点上方「用选中生成订阅」）
+        <textarea id="sub-ips" rows="3" placeholder="104.16.0.1,172.67.1.1"></textarea>
+      </label>
+      <button id="btn-sub" class="btn primary">生成订阅</button>
+      <div id="sub-result" class="sub-result"></div>
+      <div class="leak-note">
+        <b>防 DNS 泄露三件套：</b>
+        ① server 用 <code>IP 字面量</code>，客户端<strong>不解析</strong>目标域名 → 运营商看不到你访问谁；
+        ② <code>ECH</code> 加密 SNI → 连域名都不暴露；
+        ③ <code>DoH 1.1.1.1</code> 兜底解析。三者已在生成配置中启用。
+      </div>
+    </section>
+
+    <footer class="foot">
+      数据来源：cf.090227.xyz 各运营商优选 IP · GitHub IPDB 全球反代池 · 地理定位 api.ip.sb
+    </footer>
   </main>
 
-  <script src="app.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
