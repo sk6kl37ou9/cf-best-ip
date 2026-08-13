@@ -1,15 +1,15 @@
 const API = 'https://api.goodip.cc.cd';
 const $ = (s) => document.querySelector(s);
+const ROW = 46; // 与 CSS .ip-row height 一致
 
 const state = {
   me: null,
   ips: { cf: [], bestproxy: [], proxy: [] },
   meta: null,
   group: 'cf',
-  selected: new Set(), // 统一存 host：cf 组=IP，rev 组=IP:port
-  domains: [],
-  speedData: {}, // { host: { ok, ms } }
-  rev: { data: [], total: 0, ports: [], countries: [], port: '', country: '', limit: 200, offset: 0, loading: false },
+  selected: new Set(), // cf 组=IP；rev 组=IP:port
+  speedData: {}, // { key: { ok, ms } }
+  rev: { all: [], total: 0, ports: [], countries: [] },
 };
 
 async function api(path) {
@@ -18,31 +18,24 @@ async function api(path) {
   return r.json();
 }
 
-/* ---------- Toast 通知（替代 alert，更成熟） ---------- */
+/* ---------- Toast ---------- */
 function toast(msg, type = 'info') {
   let box = $('#toastBox');
-  if (!box) {
-    box = document.createElement('div');
-    box.id = 'toastBox';
-    document.body.appendChild(box);
-  }
+  if (!box) { box = document.createElement('div'); box.id = 'toastBox'; document.body.appendChild(box); }
   const el = document.createElement('div');
   el.className = 'toast ' + type;
   el.textContent = msg;
   box.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
-  setTimeout(() => {
-    el.classList.remove('show');
-    setTimeout(() => el.remove(), 300);
-  }, 2800);
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2800);
 }
 
-/* 延迟分级配色 */
+/* ---------- 延迟分级 ---------- */
 function speedTier(ms) {
-  if (ms == null || ms > 5000) return { cls: 'bad', grad: 'var(--grad-speed-slow)', label: '超时' };
-  if (ms < 150) return { cls: 'ok', grad: 'var(--grad-speed-fast)', label: ms + ' ms' };
-  if (ms < 400) return { cls: 'ok', grad: 'var(--grad-speed-mid)', label: ms + ' ms' };
-  return { cls: 'bad', grad: 'var(--grad-speed-slow)', label: ms + ' ms' };
+  if (ms == null || ms > 5000) return { cls: 'bad', label: '超时' };
+  if (ms < 150) return { cls: 'ok', grad: 'var(--speed-fast)', label: ms + ' ms' };
+  if (ms < 400) return { cls: 'ok', grad: 'var(--speed-mid)', label: ms + ' ms' };
+  return { cls: 'bad', grad: 'var(--speed-slow)', label: ms + ' ms' };
 }
 
 /* ---------- 定位 ---------- */
@@ -50,109 +43,56 @@ async function loadMe() {
   try {
     const d = await api('/api/me');
     state.me = d;
-    $('#meIp').textContent = d.ip || '—';
     const g = d.geo;
-    $('#meGeo').textContent = g ? `${g.country || ''} ${g.region || ''} ${g.city || ''}`.trim() || '—' : '—';
     const c = d.carrier || { code: 'AB', label: '境外' };
-    $('#meCarrier').innerHTML = `<span class="tag ${c.code === 'AB' ? '' : 'ok'}">${c.label}（${c.code}）</span>`;
-    $('#meEdge').textContent = d.edge ? `${d.edge.country} · ${d.edge.colo}` : '—';
+    $('#meGeo') && ($('#meGeo').textContent = g ? `${g.country || ''} ${g.region || ''} ${g.city || ''}`.trim() || '—' : '—');
+    $('#meCarrier') && ($('#meCarrier').innerHTML = `<span class="tag ${c.code === 'AB' ? '' : 'ok'}">${c.label}（${c.code}）</span>`);
+    $('#meEdge') && ($('#meEdge').textContent = d.edge ? `${d.edge.country} · ${d.edge.colo}` : '—');
+    $('#meIp') && ($('#meIp').textContent = d.ip || '—');
     $('#locText').textContent = `${d.ip} · ${c.label}`;
-    $('.dot').style.background = 'var(--c-ok)';
+    const dot = $('.dot'); if (dot) dot.style.background = 'var(--ok)';
   } catch (e) {
     $('#locText').textContent = '定位失败';
     toast('定位失败：' + e.message, 'bad');
   }
 }
 
-/* ---------- 优选域名实测（浏览器真实延迟） ---------- */
-async function loadDomains() {
+/* ---------- 加载全部分组 ---------- */
+async function loadAll() {
   try {
-    const d = await api('/api/nodes');
-    state.domains = d.nodes || [];
-  } catch { state.domains = []; }
-  renderDomains();
-  probeDomains();
-}
-async function probeDomains() {
-  const box = $('#domainList');
-  if (state.domains.length === 0) {
-    box.innerHTML = '<p class="hint">暂无优选域名数据，等待 cron 刷新…</p>';
-    return;
+    const [base, rev] = await Promise.all([
+      api('/api/ips'),
+      api('/api/ips?group=rev&limit=100000'),
+    ]);
+    if (base.ips) state.ips = base.ips;
+    if (base.meta) state.meta = base.meta;
+    if (rev.ips) { state.rev.all = rev.ips; state.rev.total = rev.total || rev.ips.length; }
+    if (rev.ports) state.rev.ports = rev.ports;
+    if (rev.countries) state.rev.countries = rev.countries;
+    if (rev.meta) state.meta = rev.meta;
+  } catch (e) {
+    toast('加载节点数据失败：' + e.message, 'bad');
   }
-  box.innerHTML = state.domains.map((n) => `
-    <div class="domain-row" data-host="${n.host}">
-      <div>
-        <div class="name">${n.name}</div>
-        <div class="meta">${n.host} ${n.note ? '· ' + n.note : ''}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <div class="bar"><i style="width:0%"></i></div>
-        <span class="tag">测速中…</span>
-      </div>
-    </div>`).join('');
-  for (const n of state.domains) {
-    const row = box.querySelector(`[data-host="${n.host}"]`);
-    const t0 = performance.now();
-    let ok = false;
-    try {
-      await fetch(`https://${n.host}/cdn-cgi/trace`, { mode: 'no-cors', cache: 'no-store', redirect: 'manual' });
-      ok = true;
-    } catch {}
-    const ms = Math.round(performance.now() - t0);
-    const tier = speedTier(ok ? ms : null);
-    const pct = ok ? Math.max(8, Math.min(100, 100 - ms / 3)) : 5;
-    const bar = row.querySelector('.bar > i');
-    bar.style.width = pct + '%';
-    bar.style.background = tier.grad;
-    const tag = row.querySelector('.tag');
-    tag.textContent = tier.label;
-    tag.className = 'tag ' + tier.cls;
-  }
+  updateStats();
+  renderTabs();
+  renderVirtual();
 }
 
-/* ---------- 优选 IP 库 ---------- */
-async function loadIps() {
-  try {
-    if (state.group === 'rev') {
-      await loadRevPage();
-    } else {
-      const d = await api('/api/ips');
-      if (d.ips) state.ips = d.ips;
-      if (d.meta) state.meta = d.meta;
-    }
-  } catch (e) {
-    toast('加载 IP 库失败：' + e.message, 'bad');
-  }
-  if (state.meta && state.meta.updatedAt) {
+function updateStats() {
+  const cf = state.ips.cf?.length || 0;
+  const bp = state.ips.bestproxy?.length || 0;
+  const px = state.ips.proxy?.length || 0;
+  const rv = state.rev.total || 0;
+  $('#statNodes').textContent = (cf + bp + px + rv).toLocaleString();
+  $('#statPorts').textContent = (state.rev.ports?.length || 0) + 4; // rev 端口 + 官方常用端口
+  $('#statCountries').textContent = (state.rev.countries?.length || 0);
+  if (state.meta?.updatedAt) {
     const d = new Date(state.meta.updatedAt);
-    const t = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    $('#footMeta').textContent = '更新于 ' + t;
+    $('#statUpdated').textContent = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
-  renderRevControls();
-  renderIps();
 }
 
-async function loadRevPage() {
-  state.rev.loading = true;
-  renderIps();
-  try {
-    const p = new URLSearchParams({ group: 'rev', limit: state.rev.limit, offset: state.rev.offset });
-    if (state.rev.port) p.set('port', state.rev.port);
-    if (state.rev.country) p.set('country', state.rev.country);
-    const d = await api('/api/ips?' + p.toString());
-    state.rev.data = d.ips || [];
-    state.rev.total = d.total || 0;
-    if (d.ports) state.rev.ports = d.ports;
-    if (d.countries) state.rev.countries = d.countries;
-    if (d.meta) state.meta = d.meta;
-  } catch (e) {
-    toast('加载反代全量失败：' + e.message, 'bad');
-  }
-  state.rev.loading = false;
-  renderRevControls();
-  renderIps();
-}
-
+/* ---------- Tabs ---------- */
 function renderTabs() {
   const labels = {
     cf: `CF 官方 (${state.ips.cf.length})`,
@@ -164,91 +104,75 @@ function renderTabs() {
     `<button class="tab ${g === state.group ? 'active' : ''}" data-g="${g}">${labels[g]}</button>`).join('');
   $('#ipTabs').querySelectorAll('.tab').forEach((b) => b.onclick = () => {
     state.group = b.dataset.g;
-    $('#revControls').hidden = state.group !== 'rev';
-    $('#ipSearch').closest('.search-wrap').classList.toggle('hidden', state.group === 'rev');
-    if (state.group === 'rev') {
-      state.rev.offset = 0;
-      loadRevPage();
-    } else {
-      renderRevControls();
-      renderIps();
-    }
+    $('#ipList').scrollTop = 0;
     renderTabs();
+    renderVirtual();
   });
 }
 
-function renderRevControls() {
-  const rc = $('#revControls');
-  if (!rc) return;
-  const portSel = $('#revPort');
-  const countrySel = $('#revCountry');
-  if (state.rev.ports.length && portSel.options.length <= 1) {
-    portSel.innerHTML = '<option value="">全部端口</option>' + state.rev.ports.map((p) => `<option value="${p}">${p}</option>`).join('');
-  }
-  if (state.rev.countries.length && countrySel.options.length <= 1) {
-    countrySel.innerHTML = '<option value="">全部国家</option>' + state.rev.countries.map((c) => `<option value="${c}">${c}</option>`).join('');
-  }
-  portSel.value = state.rev.port;
-  countrySel.value = state.rev.country;
-  const total = state.rev.total;
-  const start = total === 0 ? 0 : state.rev.offset + 1;
-  const end = Math.min(state.rev.offset + state.rev.limit, total);
-  $('#revStat').textContent = total ? `第 ${start.toLocaleString()}-${end.toLocaleString()} / 共 ${total.toLocaleString()} 条` : '无数据';
-  $('#revPrev').disabled = state.rev.offset <= 0;
-  $('#revNext').disabled = state.rev.offset + state.rev.limit >= total;
-}
-
-function currentIps() {
+/* ---------- 当前过滤后的节点数组 ---------- */
+function currentIpsFlat() {
+  let arr;
   if (state.group === 'rev') {
-    const q = ($('#ipSearch').value || '').trim().toUpperCase();
-    let arr = state.rev.data.map((x) => ({ ...x, key: x.ip + ':' + x.port }));
-    if (q) arr = arr.filter((x) => (x.country || '').toUpperCase().includes(q) || x.ip.includes(q));
-    return arr;
+    arr = state.rev.all.map((x) => ({ ip: x.ip, country: x.country, port: x.port, key: x.ip + ':' + x.port }));
+  } else {
+    arr = (state.ips[state.group] || []).map((x) => ({ ip: x.ip, country: x.country, port: 443, key: x.ip }));
   }
   const q = ($('#ipSearch').value || '').trim().toUpperCase();
-  let arr = state.ips[state.group] || [];
   if (q) arr = arr.filter((x) => (x.country || '').toUpperCase().includes(q) || x.ip.includes(q));
-  return arr.map((x) => ({ ...x, key: x.ip }));
+  return arr;
 }
 
-function renderIps() {
-  if (state.group === 'rev' && state.rev.loading) {
-    $('#ipList').innerHTML = Array.from({ length: 8 }).map(() => '<div class="skeleton-row"></div>').join('');
-    return;
-  }
-  const arr = currentIps();
-  if (arr.length === 0) {
-    $('#ipList').innerHTML = '<p class="hint">该分组暂无数据，等待 cron 刷新或调整筛选…</p>';
+/* ---------- 虚拟滚动渲染 ---------- */
+function renderVirtual() {
+  const listEl = $('#ipList');
+  if (!listEl) return;
+  const items = currentIpsFlat();
+  const vh = listEl.clientHeight || listEl.offsetHeight || 400;
+  const st = listEl.scrollTop;
+  const first = Math.max(0, Math.floor(st / ROW) - 8);
+  const last = Math.min(items.length, Math.ceil((st + vh) / ROW) + 8);
+
+  let vp = listEl.querySelector('.ip-vp');
+  if (!vp) { vp = document.createElement('div'); vp.className = 'ip-vp'; listEl.appendChild(vp); }
+  vp.style.height = (items.length * ROW) + 'px';
+  vp.innerHTML = '';
+
+  if (items.length === 0) {
+    vp.innerHTML = '<div style="padding:24px;color:var(--c-muted);text-align:center">该分组暂无数据，等待 cron 刷新或调整筛选…</div>';
     updateSelCount();
     return;
   }
-  $('#ipList').innerHTML = arr.map((x) => {
-    const sp = state.speedData[x.key];
+
+  const frag = document.createDocumentFragment();
+  for (let i = first; i < last; i++) {
+    const x = items[i];
+    const key = x.key;
+    const sp = state.speedData[key];
     const tier = sp ? speedTier(sp.ok ? sp.ms : null) : null;
-    const portTag = x.port ? `<span class="cc port">:${x.port}</span>` : '';
-    return `
-    <div class="ip-row ${state.selected.has(x.key) ? 'sel' : ''}" data-ip="${x.key}">
-      <input type="checkbox" ${state.selected.has(x.key) ? 'checked' : ''} />
-      <span class="ip">${x.ip}</span>
-      ${portTag}
-      ${x.country ? `<span class="cc">${x.country}</span>` : ''}
-      <span class="ms ${tier ? tier.cls : ''}" data-ms="${x.key}">${tier ? tier.label : '—'}</span>
-    </div>`;
-  }).join('');
-  $('#ipList').querySelectorAll('.ip-row').forEach((row) => {
-    const key = row.dataset.ip;
-    row.querySelector('input').onchange = (e) => {
-      if (e.target.checked) state.selected.add(key); else state.selected.delete(key);
-      row.classList.toggle('sel', e.target.checked);
-      updateSelCount();
-    };
-    row.querySelector('.ip').onclick = () => { row.querySelector('input').click(); };
-  });
+    const row = document.createElement('div');
+    row.className = 'ip-row' + (state.selected.has(key) ? ' sel' : '');
+    row.style.top = (i * ROW) + 'px';
+    row.dataset.ip = key;
+    row.innerHTML = `<input type="checkbox" ${state.selected.has(key) ? 'checked' : ''}><span class="ip">${x.ip}</span>${x.port ? `<span class="cc port">:${x.port}</span>` : ''}${x.country ? `<span class="cc">${x.country}</span>` : ''}<span class="ms ${tier ? tier.cls : ''}">${tier ? tier.label : '—'}</span>`;
+    const cb = row.querySelector('input');
+    cb.onchange = (e) => toggle(key, e.target.checked);
+    row.querySelector('.ip').onclick = () => { cb.checked = !cb.checked; toggle(key, cb.checked); };
+    frag.appendChild(row);
+  }
+  vp.appendChild(frag);
   updateSelCount();
 }
-function updateSelCount() { $('#selCount').textContent = state.selected.size; }
 
-/* ---------- 批量测速（服务端 /api/speed，测完自动按延迟排序） ---------- */
+function toggle(key, checked) {
+  if (checked) state.selected.add(key); else state.selected.delete(key);
+  const row = document.querySelector(`.ip-row[data-ip="${CSS.escape(key)}"]`);
+  if (row) row.classList.toggle('sel', checked);
+  updateSelCount();
+}
+function updateSelCount() { const el = $('#selCount'); if (el) el.textContent = state.selected.size; }
+
+/* ---------- 批量测速（服务端 /api/speed，测完按延迟排序） ---------- */
 function sortKey(key, results) {
   const r = results[key];
   if (!r) return { grp: 3, ms: Infinity };
@@ -263,7 +187,7 @@ function sortIps(arr, results) {
   });
 }
 async function speedSelected() {
-  if (state.selected.size === 0) { toast('请先勾选要测速的 IP', 'warn'); return; }
+  if (state.selected.size === 0) { toast('请先勾选要测速的节点', 'warn'); return; }
   const hosts = [...state.selected];
   $('#btnSpeed').disabled = true;
   const all = {};
@@ -275,28 +199,28 @@ async function speedSelected() {
     } catch {}
   }
   if (state.group === 'rev') {
-    state.rev.data = sortIps(state.rev.data.map((x) => ({ ...x, key: x.ip + ':' + x.port })), all).map((x) => ({ ip: x.ip, port: x.port, country: x.country }));
+    state.rev.all = sortIps(state.rev.all.map((x) => ({ ...x, key: x.ip + ':' + x.port })), all).map((x) => ({ ip: x.ip, port: x.port, country: x.country }));
   } else {
     const cur = state.ips[state.group];
-    if (cur && cur.length) state.ips[state.group] = sortIps(cur, all);
+    if (cur && cur.length) state.ips[state.group] = sortIps(cur.map((x) => ({ ...x, key: x.ip })), all).map((x) => ({ ip: x.ip, country: x.country }));
   }
-  renderIps();
+  renderVirtual();
   toast('测速完成，已按延迟排序', 'ok');
   $('#btnSpeed').disabled = false;
 }
 
 /* ---------- 绑定子域·浏览器实测 ---------- */
 async function bindSpeedSelected() {
-  if (state.selected.size === 0) { toast('请先勾选要绑定测速的 IP', 'warn'); return; }
+  if (state.selected.size === 0) { toast('请先勾选要绑定测速的节点', 'warn'); return; }
   const keys = [...state.selected];
-  if (!confirm(`将把 ${keys.length} 个 IP 绑定为 *.goodip.cc.cd 子域用于浏览器实测（会创建对应 DNS 记录，灰云直连）。测完记得点「解绑清理」。继续？`)) return;
+  if (!confirm(`将把 ${keys.length} 个 IP 绑定为 *.goodip.cc.cd 子域用于浏览器实测（创建 DNS 记录，灰云直连）。测完点「解绑」。继续？`)) return;
   $('#btnBindSpeed').disabled = true;
   $('#btnUnbind').disabled = false;
   for (const key of keys) {
     const ip = key.split(':')[0];
-    const el = document.querySelector(`.ms[data-ms="${key}"]`);
+    state.speedData[key] = { ok: false, ms: 0 };
+    renderVirtual();
     const host = ip.replace(/\./g, '-') + '.goodip.cc.cd';
-    if (el) { el.textContent = '绑定中…'; el.className = 'ms'; }
     try { await fetch(API + '/api/dns-bind', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ip, action: 'bind' }) }); } catch {}
     let ms = null;
     const t0 = Date.now();
@@ -304,95 +228,96 @@ async function bindSpeedSelected() {
       const s = performance.now();
       try {
         await fetch(`https://${host}/cdn-cgi/trace`, { mode: 'no-cors', cache: 'no-store', redirect: 'manual' });
-        ms = Math.round(performance.now() - s);
-        break;
+        ms = Math.round(performance.now() - s); break;
       } catch {}
       await new Promise((r) => setTimeout(r, 1000));
     }
     state.speedData[key] = { ok: ms != null, ms: ms || 0 };
-    if (el) {
-      const tier = speedTier(ms);
-      el.textContent = ms != null ? ms + ' ms(子域)' : '超时';
-      el.className = 'ms ' + tier.cls;
-    }
+    renderVirtual();
   }
   $('#btnBindSpeed').disabled = false;
   toast('子域实测完成', 'ok');
 }
 async function unbindAll() {
   const keys = [...state.selected];
-  if (keys.length === 0) { toast('请先勾选要解绑的 IP', 'warn'); return; }
+  if (keys.length === 0) { toast('请先勾选要解绑的节点', 'warn'); return; }
   $('#btnUnbind').disabled = true;
   for (const key of keys) {
     const ip = key.split(':')[0];
     try { await fetch(API + '/api/dns-bind', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ip, action: 'unbind' }) }); } catch {}
     delete state.speedData[key];
-    const el = document.querySelector(`.ms[data-ms="${key}"]`);
-    if (el) { el.textContent = '—'; el.className = 'ms'; }
   }
   $('#btnUnbind').disabled = false;
-  toast(`已解绑 ${keys.length} 个 IP 的子域 DNS 记录`, 'ok');
+  renderVirtual();
+  toast(`已解绑 ${keys.length} 个节点的子域 DNS 记录`, 'ok');
 }
 
 /* ---------- 订阅生成 ---------- */
 async function genSub() {
-  if (state.selected.size === 0) { toast('请先勾选要生成订阅的 IP', 'warn'); return; }
+  if (state.selected.size === 0) { toast('请先勾选要生成订阅的节点', 'warn'); return; }
   const type = $('#subType').value;
   const uuid = $('#subUuid').value.trim();
   const sni = $('#subSni').value.trim() || 'www.visa.cn';
   const port = $('#subPort').value.trim() || '443';
   const useDomain = $('#subUseDomain').checked;
-  let url, label;
+  let url;
   if (useDomain) {
     const hosts = [...state.selected].map((k) => k.split(':')[0].replace(/\./g, '-') + '.goodip.cc.cd').join(',');
     url = `/api/sub?type=${type}&hosts=${encodeURIComponent(hosts)}&sni=${encodeURIComponent(sni)}&port=${port}` + (uuid ? `&uuid=${encodeURIComponent(uuid)}` : '');
-    label = `${state.selected.size} 个子域`;
   } else {
-    const ips = [...state.selected].join(','); // cf 组=IP；rev 组=IP:port（订阅模块逐条解析端口）
+    const ips = [...state.selected].join(','); // cf=IP；rev=IP:port（订阅模块逐条解析端口）
     url = `/api/sub?type=${type}&ips=${encodeURIComponent(ips)}&sni=${encodeURIComponent(sni)}&port=${port}` + (uuid ? `&uuid=${encodeURIComponent(uuid)}` : '');
-    label = `${state.selected.size} 个 IP`;
   }
   try {
     const r = await fetch(API + url, { cache: 'no-store' });
     const text = await r.text();
     $('#subResult').value = (type === 'vless' || type === 'trojan') ? API + url : text;
-    $('#subInfo').textContent = `已生成 ${label} · ${type}` + (useDomain ? ' · 子域版（证书有效·防超时）' : '');
+    $('#subInfo').textContent = `已生成 ${state.selected.size} 个节点 · ${type}` + (useDomain ? ' · 子域版（证书有效）' : '');
     toast('订阅已生成', 'ok');
   } catch (e) { $('#subInfo').textContent = '生成失败：' + e.message; toast('生成失败：' + e.message, 'bad'); }
 }
 async function copySub() {
-  const v = $('#subResult').value;
-  if (!v) return;
+  const v = $('#subResult').value; if (!v) return;
   try { await navigator.clipboard.writeText(v); toast('已复制订阅', 'ok'); $('#subInfo').textContent = '已复制'; } catch {}
 }
 
-/* ---------- 优选 IP API（一键生成纯文本地址，供 free-bw8 等） ---------- */
+/* ---------- 分控输出：动态生成专属 API（按地区抽量） ---------- */
 async function genApiUrl() {
-  if (state.selected.size === 0) { toast('请先勾选要用的 IP', 'warn'); return; }
-  const port = ($('#apiPort').value || '443').trim() || '443';
-  let url;
-  if (state.group === 'rev') {
-    // rev 组选中项已是 IP:port，直接透传
-    const hosts = [...state.selected].join(',');
-    url = `${API}/api/iplist?ips=${encodeURIComponent(hosts)}`;
-  } else {
-    const ips = [...state.selected].join(',');
-    url = `${API}/api/iplist?ips=${encodeURIComponent(ips)}&port=${port}`;
-  }
+  const src = $('#apiSrc').value;
+  const per = parseInt($('#apiPer').value || '0', 10);
+  const url = `${API}/api/iplist?src=${src}` + (per > 0 ? `&perRegion=${per}` : '');
   $('#apiUrl').value = url;
-  $('#apiInfo').textContent = `已生成优选IP API（${state.selected.size} 个 IP）`;
+  $('#apiInfo').textContent = '生成中…';
   try {
-    const r = await fetch(url, { cache: 'no-store' });
-    const txt = await r.text();
+    const txt = await (await fetch(url, { cache: 'no-store' })).text();
     const lines = txt.trim().split('\n').filter(Boolean);
-    $('#apiPreview').textContent = lines.slice(0, 15).join('\n') + (lines.length > 15 ? `\n… 共 ${lines.length} 个` : '');
-    toast('API URL 已生成', 'ok');
-  } catch { $('#apiPreview').textContent = ''; }
+    $('#apiInfo').textContent = `精选 ${lines.length} 条 · 每地区 ${per > 0 ? per : '全部'}`;
+    $('#apiPreview').textContent = lines.slice(0, 20).join('\n') + (lines.length > 20 ? `\n… 共 ${lines.length} 条` : '');
+    toast('专属 API 已生成', 'ok');
+  } catch (e) {
+    $('#apiInfo').textContent = '生成失败：' + e.message;
+    $('#apiPreview').textContent = '';
+    toast('生成失败：' + e.message, 'bad');
+  }
 }
 async function copyApiUrl() {
-  const v = $('#apiUrl').value;
-  if (!v) return;
-  try { await navigator.clipboard.writeText(v); toast('已复制 API URL', 'ok'); } catch {}
+  const v = $('#apiUrl').value; if (!v) return;
+  try { await navigator.clipboard.writeText(v); toast('已复制 API 链接', 'ok'); } catch {}
+}
+
+/* ---------- 强制拉取总控源 ---------- */
+async function forceRefresh() {
+  $('#btnRefresh').disabled = true;
+  $('#btnRefresh').textContent = '🔄 刷新中…';
+  try {
+    const d = await api('/api/refresh');
+    if (d.ok) {
+      toast(`已拉取最新总控源：${JSON.stringify(d.counts)}`, 'ok');
+      await loadAll();
+    } else toast('刷新失败：' + (d.error || '未知'), 'bad');
+  } catch (e) { toast('刷新失败：' + e.message, 'bad'); }
+  $('#btnRefresh').disabled = false;
+  $('#btnRefresh').textContent = '🔄 强制刷新';
 }
 
 /* ---------- 域名配优选 IP ---------- */
@@ -403,36 +328,28 @@ async function genDns() {
     const d = await api('/api/dns-config?domain=' + encodeURIComponent(domain));
     const ips = (d.recommendedIps || []).map((ip) => `<div class="ip-line">${ip}</div>`).join('');
     const tut = (d.tutorial || []).map((t) => `<li>${t}</li>`).join('');
-    $('#dnsResult').innerHTML = `
-      <div class="note">${d.note}</div>
-      <div style="margin-top:12px"><b>推荐填入 DNS 的优选 IP（取 CF 官方已优选前 ${d.recommendedIps.length} 个）：</b>${ips}</div>
-      <ol>${tut}</ol>`;
+    $('#dnsResult').innerHTML = `<div class="note">${d.note}</div><div style="margin-top:12px"><b>推荐填入 DNS 的优选 IP（取 CF 官方已优选前 ${d.recommendedIps.length} 个）：</b>${ips}</div><ol>${tut}</ol>`;
     toast('配置已生成', 'ok');
   } catch (e) { $('#dnsResult').innerHTML = '<div class="note">生成失败：' + e.message + '</div>'; toast('生成失败：' + e.message, 'bad'); }
 }
 
-/* ---------- 事件绑定 ---------- */
+/* ---------- 事件 ---------- */
 function bindEvents() {
-  $('#btnProbeDomains').onclick = probeDomains;
+  $('#btnRefresh').onclick = forceRefresh;
   $('#btnSpeed').onclick = speedSelected;
   $('#btnBindSpeed').onclick = bindSpeedSelected;
   $('#btnUnbind').onclick = unbindAll;
-  $('#btnSelectAll').onclick = () => { currentIps().forEach((x) => state.selected.add(x.key)); renderIps(); };
-  $('#btnClear').onclick = () => { state.selected.clear(); renderIps(); };
-  $('#ipSearch').oninput = renderIps;
-  $('#btnGenSub').onclick = genSub;
-  $('#btnCopySub').onclick = copySub;
+  $('#btnSelectAll').onclick = () => { currentIpsFlat().forEach((x) => state.selected.add(x.key)); renderVirtual(); };
+  $('#btnClear').onclick = () => { state.selected.clear(); renderVirtual(); };
+  $('#ipSearch').oninput = renderVirtual;
+  $('#ipList').addEventListener('scroll', () => requestAnimationFrame(renderVirtual));
   $('#btnGenApi').onclick = genApiUrl;
   $('#btnCopyApi').onclick = copyApiUrl;
+  $('#btnGenSub').onclick = genSub;
+  $('#btnCopySub').onclick = copySub;
   $('#btnDns').onclick = genDns;
-  $('#revPort').onchange = () => { state.rev.port = $('#revPort').value; state.rev.offset = 0; loadRevPage(); };
-  $('#revCountry').onchange = () => { state.rev.country = $('#revCountry').value; state.rev.offset = 0; loadRevPage(); };
-  $('#revPrev').onclick = () => { if (state.rev.offset >= state.rev.limit) { state.rev.offset -= state.rev.limit; loadRevPage(); } };
-  $('#revNext').onclick = () => { if (state.rev.offset + state.rev.limit < state.rev.total) { state.rev.offset += state.rev.limit; loadRevPage(); } };
 }
 
-/* ---------- 启动 ---------- */
 bindEvents();
 loadMe();
-loadDomains();
-loadIps();
+loadAll();

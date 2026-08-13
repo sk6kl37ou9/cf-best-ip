@@ -13,6 +13,11 @@ function json(data, status = 200) {
     headers: { 'content-type': 'application/json; charset=utf-8', ...CORS },
   });
 }
+function text(data, extra = {}) {
+  return new Response(data, {
+    headers: { 'content-type': 'text/plain; charset=utf-8', ...extra, ...CORS },
+  });
+}
 function withCors(res) {
   for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
   return res;
@@ -135,8 +140,40 @@ export default {
 
     // 优选IP纯文本列表（供 free-bw8 / WorkerVless2sub 等订阅生成器的 addressesapi 使用）
     // 返回 text/plain：每行 IP:端口#地区
-    // ips 参数支持 "IP" 或 "IP:port" 格式，后者优先使用 IP 自带端口
+    // 两种模式：
+    //   A) 动态生成：?src=cf|bestproxy|proxy|rev|all&perRegion=N  —— 按数据源取全量，每个地区最多 N 条（分控输出精选）
+    //   B) 勾选透传：?ips=IP,IP:port,...&port=443  —— 兼容旧版用户勾选模式
     if (path === '/api/iplist') {
+      const src = url.searchParams.get('src');
+      const perRegion = parseInt(url.searchParams.get('perRegion') || '0', 10);
+      if (src) {
+        const collect = (arr, port) => (arr || []).map((x) => ({ ip: x.ip, country: x.country || '', port: x.port || port }));
+        const lists = [];
+        const cfAll = await kvJson(env, 'ips', null);
+        if (cfAll) {
+          if (src === 'cf' || src === 'all') lists.push(...collect(cfAll.cf, 443));
+          if (src === 'bestproxy' || src === 'all') lists.push(...collect(cfAll.bestproxy, 443));
+          if (src === 'proxy' || src === 'all') lists.push(...collect(cfAll.proxy, 443));
+        }
+        const rev = await kvJson(env, 'ipsrev', null);
+        if (rev && (src === 'rev' || src === 'all')) lists.push(...(rev.data || []).map((x) => ({ ip: x.ip, country: x.country || '', port: x.port })));
+        let chosen = lists;
+        if (perRegion > 0) {
+          const groups = {};
+          for (const x of lists) {
+            const c = x.country || 'CF';
+            (groups[c] = groups[c] || []).push(x);
+          }
+          chosen = [];
+          for (const c of Object.keys(groups)) chosen.push(...groups[c].slice(0, perRegion));
+        }
+        const seen = new Set();
+        const lines = chosen
+          .filter((x) => { if (seen.has(x.ip)) return false; seen.add(x.ip); return true; })
+          .map((x) => `${x.ip}:${x.port || 443}#${x.country || ''}`);
+        return text(lines.join('\n'), { 'cache-control': 'no-store' });
+      }
+      // 兼容旧模式：用户勾选的 IP 透传
       const rawIps = (url.searchParams.get('ips') || '').split(',').map((s) => s.trim()).filter(Boolean);
       const defaultPort = url.searchParams.get('port') || '443';
       const all = await kvJson(env, 'ips', null);
@@ -151,14 +188,42 @@ export default {
         for (const x of (rev.data || [])) cmap[x.ip] = x.country || cmap[x.ip] || '';
       }
       const lines = rawIps.map((entry) => {
-        // 支持 IP 或 IP:port 格式
         const [ip, p] = entry.split(':');
         const port = p || defaultPort;
         return `${ip}:${port}#${cmap[ip] || ''}`;
       });
-      return new Response(lines.join('\n'), {
-        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', ...CORS },
-      });
+      return text(lines.join('\n'), { 'cache-control': 'no-store' });
+    }
+
+    // 强制拉取总控源（复刻 fetch-ips：拉 IPDB 重写 KV 的 cf/bestproxy/proxy/meta）
+    // 不覆盖 rev（rev 来自手动导入的 ip.zip）
+    if (path === '/api/refresh') {
+      try {
+        const RAW = 'https://raw.githubusercontent.com/ymyuuu/IPDB/main';
+        const get = async (u) => (await fetch(u, { headers: { 'user-agent': 'cf-best-ip/1.0' } })).text();
+        const parse = (t) => t
+          .trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+          .filter((l) => /^[\d.]+#?[A-Z]{0,2}$/.test(l) || /^[\d.]+$/.test(l))
+          .map((l) => { const [ip, c] = l.split('#'); return { ip, country: c || '' }; });
+        const [bestcf, bestproxy, proxy] = await Promise.all([
+          get(`${RAW}/BestCF/bestcfv4.txt`).then(parse),
+          get(`${RAW}/BestProxy/bestproxy&country.txt`).then(parse),
+          get(`${RAW}/proxy.txt`).then(parse),
+        ]);
+        const cf = bestcf.map((x) => ({ ip: x.ip, country: x.country || 'CF' }));
+        const ips = { cf, bestproxy, proxy };
+        const meta = {
+          updatedAt: new Date().toISOString(),
+          counts: { cf: cf.length, bestproxy: bestproxy.length, proxy: proxy.length },
+          source: 'ymyuu/IPDB',
+          refreshedBy: 'api',
+        };
+        await env.BESTIP.put('ips', JSON.stringify(ips));
+        await env.BESTIP.put('meta', JSON.stringify(meta));
+        return json({ ok: true, counts: meta.counts, updatedAt: meta.updatedAt });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
     }
 
     // DNS 自动绑定：把优选IP绑成子域（带证书，浏览器可真测；订阅可用子域替代裸IP）
